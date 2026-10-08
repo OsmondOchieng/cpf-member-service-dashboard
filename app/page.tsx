@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Bar,
   BarChart,
   CartesianGrid,
   Cell,
+  Legend,
   Pie,
   PieChart,
   ResponsiveContainer,
@@ -30,7 +31,12 @@ type ServiceRequest = {
 
 const PAGE_SIZE = 10;
 
-const STATUS_OPTIONS = ["All", "Resolved", "Pending", "In Progress"];
+const STATUS_OPTIONS = [
+  "All",
+  "Resolved",
+  "Pending",
+  "In Progress",
+];
 
 const BRANCH_OPTIONS = [
   "All",
@@ -41,76 +47,140 @@ const BRANCH_OPTIONS = [
   "Nakuru",
 ];
 
-const PRIORITY_OPTIONS = ["All", "Normal", "High", "Urgent"];
+const PRIORITY_OPTIONS = [
+  "All",
+  "Normal",
+  "High",
+  "Urgent",
+];
 
-const COLORS = {
-  resolved: "#008C95",
-  pending: "#F5A623",
-  progress: "#6B7280",
+const STATUS_COLORS = {
+  Resolved: "#008C95",
+  Pending: "#F5A623",
+  "In Progress": "#64748B",
 };
 
-export default function Home() {
-  const [requests, setRequests] = useState<ServiceRequest[]>([]);
+const SATISFACTION_COLORS = [
+  "#008C95",
+  "#2CA6A4",
+  "#F5A623",
+  "#94A3B8",
+  "#CBD5E1",
+];
 
+const CHANNEL_COLORS = [
+  "#008C95",
+  "#F5A623",
+  "#64748B",
+  "#94A3B8",
+];
+
+const requests = requestData as ServiceRequest[];
+
+/*
+  BUSINESS NOTE:
+  The original prototype dataset does not contain customer feedback
+  or contact-channel fields.
+
+  Therefore these values are clearly labelled as PROTOTYPE / DUMMY DATA.
+  They are generated consistently from the request index so that the
+  dashboard can demonstrate the intended analysis without pretending
+  that these are real member measurements.
+*/
+
+const prototypeFeedbackData = requests.map((request, index) => {
+  const ratings = [5, 4, 4, 5, 3, 4, 5, 4, 3, 5];
+  const rating = ratings[index % ratings.length];
+
+  return {
+    ...request,
+    feedback_rating: rating,
+  };
+});
+
+const prototypeChannelData = requests.map((request, index) => {
+  const channels = ["Email", "Email", "Chatbot", "Phone", "Branch"];
+
+  return {
+    ...request,
+    contact_channel: channels[index % channels.length],
+  };
+});
+
+export default function DashboardPage() {
   const [statusFilter, setStatusFilter] = useState("All");
   const [branchFilter, setBranchFilter] = useState("All");
   const [requestTypeFilter, setRequestTypeFilter] = useState("All");
   const [priorityFilter, setPriorityFilter] = useState("All");
 
+  const [searchTerm, setSearchTerm] = useState("");
+
   const [currentPage, setCurrentPage] = useState(1);
+
   const [darkMode, setDarkMode] = useState(false);
 
-  useEffect(() => {
-    setRequests(requestData as ServiceRequest[]);
+  const requestTypes = useMemo(() => {
+    return [
+      "All",
+      ...Array.from(
+        new Set(requests.map((request) => request.request_type))
+      ),
+    ];
   }, []);
 
-  const requestTypes = useMemo(() => {
-    const types = Array.from(
-      new Set(requests.map((request) => request.request_type))
-    );
-
-    return ["All", ...types];
-  }, [requests]);
-
   /*
-   * FILTERING
-   * This works on the complete dataset.
-   */
+    FILTERED REQUESTS
+    This is the main dataset used by the dashboard.
+  */
+
   const filteredRequests = useMemo(() => {
+    const search = searchTerm.trim().toLowerCase();
+
     return requests.filter((request) => {
       const matchesStatus =
-        statusFilter === "All" || request.status === statusFilter;
+        statusFilter === "All" ||
+        request.status === statusFilter;
 
       const matchesBranch =
-        branchFilter === "All" || request.branch === branchFilter;
+        branchFilter === "All" ||
+        request.branch === branchFilter;
 
       const matchesRequestType =
         requestTypeFilter === "All" ||
         request.request_type === requestTypeFilter;
 
       const matchesPriority =
-        priorityFilter === "All" || request.priority === priorityFilter;
+        priorityFilter === "All" ||
+        request.priority === priorityFilter;
+
+      const matchesSearch =
+        search === "" ||
+        request.request_id.toLowerCase().includes(search) ||
+        request.branch.toLowerCase().includes(search) ||
+        request.request_type.toLowerCase().includes(search) ||
+        request.priority.toLowerCase().includes(search) ||
+        request.status.toLowerCase().includes(search);
 
       return (
         matchesStatus &&
         matchesBranch &&
         matchesRequestType &&
-        matchesPriority
+        matchesPriority &&
+        matchesSearch
       );
     });
   }, [
-    requests,
     statusFilter,
     branchFilter,
     requestTypeFilter,
     priorityFilter,
+    searchTerm,
   ]);
 
   /*
-   * KPI CALCULATIONS
-   * These use the complete filtered dataset,
-   * NOT just the 10 records currently displayed.
-   */
+    KPI CALCULATIONS
+  */
+
   const totalRequests = filteredRequests.length;
 
   const resolvedRequests = filteredRequests.filter(
@@ -133,252 +203,466 @@ export default function Home() {
   const averageTurnaround =
     resolvedRequests.length > 0
       ? resolvedRequests.reduce(
-          (total, request) => total + Number(request.turnaround_days),
+          (sum, request) => sum + request.turnaround_days,
           0
         ) / resolvedRequests.length
       : 0;
 
   /*
-   * PAGINATION
-   * 10 records are shown on each page.
-   */
-  const totalPages = Math.max(1, Math.ceil(totalRequests / PAGE_SIZE));
+    PAGINATION
+  */
 
-  const safeCurrentPage = Math.min(currentPage, totalPages);
-
-  const startIndex = (safeCurrentPage - 1) * PAGE_SIZE;
-
-  const displayedRequests = filteredRequests.slice(
-    startIndex,
-    startIndex + PAGE_SIZE
+  const totalPages = Math.max(
+    1,
+    Math.ceil(totalRequests / PAGE_SIZE)
   );
 
-  const startRecord =
-    totalRequests === 0 ? 0 : startIndex + 1;
+  const safeCurrentPage = Math.min(
+    currentPage,
+    totalPages
+  );
 
-  const endRecord = Math.min(
+  const startIndex =
+    (safeCurrentPage - 1) * PAGE_SIZE;
+
+  const endIndex = Math.min(
     startIndex + PAGE_SIZE,
     totalRequests
   );
 
+  const displayedRequests = filteredRequests.slice(
+    startIndex,
+    endIndex
+  );
+
   /*
-   * STATUS CHART DATA
-   */
+    STATUS CHART
+  */
+
   const statusData = [
     {
       name: "Resolved",
       value: resolvedRequests.length,
-      color: COLORS.resolved,
     },
     {
       name: "Pending",
       value: pendingRequests.length,
-      color: COLORS.pending,
     },
     {
       name: "In Progress",
       value: inProgressRequests.length,
-      color: COLORS.progress,
     },
   ];
 
   /*
-   * BRANCH PERFORMANCE DATA
-   */
-  const branchData = BRANCH_OPTIONS.filter(
-    (branch) => branch !== "All"
-  ).map((branch) => {
-    const branchRequests = filteredRequests.filter(
-      (request) => request.branch === branch
+    BRANCH PERFORMANCE
+  */
+
+  const branchData = useMemo(() => {
+    const branches = Array.from(
+      new Set(filteredRequests.map((request) => request.branch))
     );
 
-    const branchResolved = branchRequests.filter(
-      (request) => request.status === "Resolved"
-    );
+    return branches.map((branch) => {
+      const branchRequests = filteredRequests.filter(
+        (request) => request.branch === branch
+      );
 
-    const branchResolutionRate =
-      branchRequests.length > 0
-        ? (branchResolved.length / branchRequests.length) * 100
-        : 0;
+      const branchResolved = branchRequests.filter(
+        (request) => request.status === "Resolved"
+      );
 
-    const branchTurnaround =
-      branchResolved.length > 0
-        ? branchResolved.reduce(
-            (total, request) =>
-              total + Number(request.turnaround_days),
-            0
-          ) / branchResolved.length
-        : 0;
+      const branchResolutionRate =
+        branchRequests.length > 0
+          ? (branchResolved.length / branchRequests.length) * 100
+          : 0;
 
-    return {
-      branch,
-      requests: branchRequests.length,
-      resolutionRate: Number(branchResolutionRate.toFixed(1)),
-      turnaround: Number(branchTurnaround.toFixed(1)),
-    };
-  });
+      const branchAverageTurnaround =
+        branchResolved.length > 0
+          ? branchResolved.reduce(
+              (sum, request) =>
+                sum + request.turnaround_days,
+              0
+            ) / branchResolved.length
+          : 0;
+
+      return {
+        branch,
+        requests: branchRequests.length,
+        resolved: branchResolved.length,
+        resolutionRate: Number(
+          branchResolutionRate.toFixed(1)
+        ),
+        turnaround: Number(
+          branchAverageTurnaround.toFixed(1)
+        ),
+      };
+    });
+  }, [filteredRequests]);
 
   /*
-   * RESET FILTERS
-   */
-  function resetFilters() {
+    CUSTOMER SATISFACTION
+    PROTOTYPE / DUMMY DATA ONLY
+  */
+
+  const filteredFeedback = useMemo(() => {
+    const filteredIds = new Set(
+      filteredRequests.map((request) => request.request_id)
+    );
+
+    return prototypeFeedbackData.filter((request) =>
+      filteredIds.has(request.request_id)
+    );
+  }, [filteredRequests]);
+
+  const satisfactionDistribution = useMemo(() => {
+    return [1, 2, 3, 4, 5].map((rating) => ({
+      rating: `${rating} Star`,
+      count: filteredFeedback.filter(
+        (item) => item.feedback_rating === rating
+      ).length,
+    }));
+  }, [filteredFeedback]);
+
+  const averageSatisfaction =
+    filteredFeedback.length > 0
+      ? filteredFeedback.reduce(
+          (sum, item) => sum + item.feedback_rating,
+          0
+        ) / filteredFeedback.length
+      : 0;
+
+  const positiveFeedbackPercentage =
+    filteredFeedback.length > 0
+      ? (filteredFeedback.filter(
+          (item) => item.feedback_rating >= 4
+        ).length /
+          filteredFeedback.length) *
+        100
+      : 0;
+
+  /*
+    CONTACT CHANNEL ANALYSIS
+    PROTOTYPE / DUMMY DATA ONLY
+  */
+
+  const filteredChannels = useMemo(() => {
+    const filteredIds = new Set(
+      filteredRequests.map((request) => request.request_id)
+    );
+
+    return prototypeChannelData.filter((request) =>
+      filteredIds.has(request.request_id)
+    );
+  }, [filteredRequests]);
+
+  const channelData = useMemo(() => {
+    const channels = [
+      "Email",
+      "Chatbot",
+      "Phone",
+      "Branch",
+    ];
+
+    return channels.map((channel) => ({
+      name: channel,
+      value: filteredChannels.filter(
+        (item) => item.contact_channel === channel
+      ).length,
+    }));
+  }, [filteredChannels]);
+
+  const topChannel =
+    [...channelData].sort(
+      (a, b) => b.value - a.value
+    )[0]?.name || "N/A";
+
+  /*
+    RESET FILTERS
+  */
+
+  const resetFilters = () => {
     setStatusFilter("All");
     setBranchFilter("All");
     setRequestTypeFilter("All");
     setPriorityFilter("All");
+    setSearchTerm("");
     setCurrentPage(1);
-  }
+  };
 
   /*
-   * FILTER CHANGES
-   * Whenever a filter changes, return to page 1.
-   */
-  function changeStatus(value: string) {
+    FILTER HELPERS
+  */
+
+  const updateStatus = (value: string) => {
     setStatusFilter(value);
     setCurrentPage(1);
-  }
+  };
 
-  function changeBranch(value: string) {
+  const updateBranch = (value: string) => {
     setBranchFilter(value);
     setCurrentPage(1);
-  }
+  };
 
-  function changeRequestType(value: string) {
+  const updateRequestType = (value: string) => {
     setRequestTypeFilter(value);
     setCurrentPage(1);
-  }
+  };
 
-  function changePriority(value: string) {
+  const updatePriority = (value: string) => {
     setPriorityFilter(value);
     setCurrentPage(1);
-  }
+  };
+
+  const updateSearch = (value: string) => {
+    setSearchTerm(value);
+    setCurrentPage(1);
+  };
 
   /*
-   * PAGINATION
-   */
-  function goToPage(page: number) {
+    CSV EXPORT
+  */
+
+  const exportCSV = () => {
+    const headers = [
+      "Request ID",
+      "Branch",
+      "Request Type",
+      "Priority",
+      "Status",
+      "Turnaround Days",
+    ];
+
+    const rows = filteredRequests.map((request) => [
+      request.request_id,
+      request.branch,
+      request.request_type,
+      request.priority,
+      request.status,
+      request.turnaround_days,
+    ]);
+
+    const csvContent = [
+      headers.join(","),
+      ...rows.map((row) =>
+        row
+          .map((value) =>
+            `"${String(value).replace(/"/g, '""')}"`
+          )
+          .join(",")
+      ),
+    ].join("\n");
+
+    const blob = new Blob([csvContent], {
+      type: "text/csv;charset=utf-8;",
+    });
+
+    const url = URL.createObjectURL(blob);
+
+    const link = document.createElement("a");
+
+    link.href = url;
+    link.download = "cpf-member-service-report.csv";
+
+    document.body.appendChild(link);
+
+    link.click();
+
+    document.body.removeChild(link);
+
+    URL.revokeObjectURL(url);
+  };
+
+  /*
+    PAGE NAVIGATION
+  */
+
+  const goToPage = (page: number) => {
     if (page >= 1 && page <= totalPages) {
       setCurrentPage(page);
     }
-  }
+  };
+
+  /*
+    THEME CLASSES
+  */
+
+  const pageBackground = darkMode
+    ? "bg-slate-950 text-slate-100"
+    : "bg-slate-100 text-slate-900";
+
+  const cardBackground = darkMode
+    ? "border-slate-800 bg-slate-900"
+    : "border-slate-200 bg-white";
+
+  const mutedText = darkMode
+    ? "text-slate-400"
+    : "text-slate-500";
+
+  const tableHeader = darkMode
+    ? "bg-slate-800 text-slate-300"
+    : "bg-slate-50 text-slate-600";
+
+  const tableRow = darkMode
+    ? "border-slate-800 hover:bg-slate-800/60"
+    : "border-slate-100 hover:bg-slate-50";
 
   return (
     <main
-      className={
-        darkMode
-          ? "min-h-screen bg-slate-950 text-slate-100 transition-colors duration-300"
-          : "min-h-screen bg-slate-50 text-slate-900 transition-colors duration-300"
-      }
+      className={`min-h-screen transition-colors duration-300 ${pageBackground}`}
     >
-      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+      {/* =========================================================
+          HEADER
+      ========================================================== */}
 
-        {/* =========================
-            HEADER
-        ========================= */}
-
-        <header
-          className={
-            darkMode
-              ? "mb-6 rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-sm"
-              : "mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
-          }
-        >
-          <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
-
-            {/* CPF LOGO + TITLE */}
-
-            <div className="flex items-center gap-4">
-
-              <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-white shadow-sm overflow-hidden">
+      <header
+        className={`border-b ${
+          darkMode
+            ? "border-slate-800 bg-slate-950"
+            : "border-slate-200 bg-white"
+        }`}
+      >
+        <div className="mx-auto max-w-7xl px-4 py-5 sm:px-6 lg:px-8">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+            <div className="flex items-start gap-4">
+              {/* CPF LOGO */}
+              <div className="shrink-0">
                 <img
                   src="/cpf-logo.png"
                   alt="CPF Financial Services"
-                  className="h-full w-full object-contain p-2"
+                  className="h-16 w-auto object-contain sm:h-20"
                 />
               </div>
 
+              {/* HEADER TEXT */}
               <div>
-                <p className="text-sm font-semibold uppercase tracking-wider text-[#007C83]">
+                <div className="text-xs font-bold uppercase tracking-[0.22em] text-[#008C95] sm:text-sm">
                   CPF FINANCIAL SERVICES
-                </p>
+                </div>
 
-                <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">
+                <h1
+                  className={`mt-1 text-2xl font-bold tracking-tight sm:text-3xl ${
+                    darkMode
+                      ? "text-white"
+                      : "text-slate-900"
+                  }`}
+                >
                   Member Service Request Dashboard
                 </h1>
 
                 <p
-                  className={
-                    darkMode
-                      ? "mt-1 text-sm text-slate-400"
-                      : "mt-1 text-sm text-slate-500"
-                  }
+                  className={`mt-2 max-w-2xl text-sm sm:text-base ${mutedText}`}
                 >
-                  Operational view of member service requests, resolution
-                  status and turnaround performance.
+                  Operational view of member service requests,
+                  resolution status and turnaround performance.
                 </p>
               </div>
             </div>
 
-            {/* DARK / LIGHT MODE */}
-
+            {/* THEME BUTTON */}
             <button
+              type="button"
               onClick={() => setDarkMode(!darkMode)}
-              className={
-                darkMode
-                  ? "inline-flex items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-800 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-700"
-                  : "inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-200"
-              }
-              aria-label="Toggle dark and light mode"
+              className="rounded-lg border border-[#008C95] px-4 py-2 text-sm font-semibold text-[#008C95] transition hover:bg-[#008C95] hover:text-white"
             >
-              {darkMode ? "☀️ Light Mode" : "🌙 Dark Mode"}
+              {darkMode
+                ? "☀️ Light Mode"
+                : "🌙 Dark Mode"}
             </button>
           </div>
-        </header>
 
-        {/* =========================
-            FILTERS
-        ========================= */}
+          {/* =====================================================
+              NAVIGATION
+          ====================================================== */}
+
+          <nav className="mt-5 flex flex-wrap gap-2 border-t border-slate-200 pt-4 dark:border-slate-800">
+            <a
+              href="#dashboard"
+              className="rounded-md px-3 py-2 text-sm font-medium text-[#008C95] hover:bg-slate-100 dark:hover:bg-slate-800"
+            >
+              Dashboard
+            </a>
+
+            <a
+              href="#feedback"
+              className={`rounded-md px-3 py-2 text-sm font-medium ${mutedText} hover:bg-slate-100 dark:hover:bg-slate-800`}
+            >
+              Member Feedback
+            </a>
+
+            <a
+              href="#reports"
+              className={`rounded-md px-3 py-2 text-sm font-medium ${mutedText} hover:bg-slate-100 dark:hover:bg-slate-800`}
+            >
+              Reports
+            </a>
+
+            <a
+              href="#ai-insights"
+              className={`rounded-md px-3 py-2 text-sm font-medium ${mutedText} hover:bg-slate-100 dark:hover:bg-slate-800`}
+            >
+              AI Insights
+            </a>
+          </nav>
+        </div>
+      </header>
+
+      <div
+        id="dashboard"
+        className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:px-8"
+      >
+        {/* =======================================================
+            SEARCH + FILTERS
+        ======================================================== */}
 
         <section
-          className={
-            darkMode
-              ? "mb-6 rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-sm"
-              : "mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
-          }
+          className={`rounded-xl border p-5 shadow-sm ${cardBackground}`}
         >
-          <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="mb-4">
+            <h2 className="text-lg font-bold">
+              Search & Filters
+            </h2>
 
-            <div>
-              <h2 className="text-lg font-bold">
-                Dashboard Filters
-              </h2>
-
-              <p
-                className={
-                  darkMode
-                    ? "text-sm text-slate-400"
-                    : "text-sm text-slate-500"
-                }
-              >
-                Filter the service request workload by operational criteria.
-              </p>
-            </div>
-
-            <button
-              onClick={resetFilters}
-              className="rounded-xl bg-[#007C83] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#006970]"
-            >
-              Reset Filters
-            </button>
+            <p className={`mt-1 text-sm ${mutedText}`}>
+              Narrow the dashboard to the operational records
+              you want to analyse.
+            </p>
           </div>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {/* SEARCH */}
 
+          <div className="mb-4">
+            <label
+              htmlFor="search"
+              className="mb-2 block text-sm font-semibold"
+            >
+              Search requests
+            </label>
+
+            <input
+              id="search"
+              type="text"
+              value={searchTerm}
+              onChange={(event) =>
+                updateSearch(event.target.value)
+              }
+              placeholder="Search request ID, branch, request type..."
+              className={`w-full rounded-lg border px-4 py-3 text-sm outline-none transition focus:border-[#008C95] focus:ring-2 focus:ring-[#008C95]/20 ${
+                darkMode
+                  ? "border-slate-700 bg-slate-800 text-white placeholder:text-slate-500"
+                  : "border-slate-300 bg-white text-slate-900 placeholder:text-slate-400"
+              }`}
+            />
+          </div>
+
+          {/* FILTERS */}
+
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
             <FilterSelect
               label="Status"
               value={statusFilter}
               options={STATUS_OPTIONS}
-              onChange={changeStatus}
+              onChange={updateStatus}
               darkMode={darkMode}
             />
 
@@ -386,7 +670,7 @@ export default function Home() {
               label="Branch"
               value={branchFilter}
               options={BRANCH_OPTIONS}
-              onChange={changeBranch}
+              onChange={updateBranch}
               darkMode={darkMode}
             />
 
@@ -394,7 +678,7 @@ export default function Home() {
               label="Request Type"
               value={requestTypeFilter}
               options={requestTypes}
-              onChange={changeRequestType}
+              onChange={updateRequestType}
               darkMode={darkMode}
             />
 
@@ -402,34 +686,41 @@ export default function Home() {
               label="Priority"
               value={priorityFilter}
               options={PRIORITY_OPTIONS}
-              onChange={changePriority}
+              onChange={updatePriority}
               darkMode={darkMode}
             />
 
+            <button
+              type="button"
+              onClick={resetFilters}
+              className="mt-auto rounded-lg border border-[#008C95] px-4 py-3 text-sm font-semibold text-[#008C95] transition hover:bg-[#008C95] hover:text-white"
+            >
+              Reset Filters
+            </button>
           </div>
 
-          <div
-            className={
-              darkMode
-                ? "mt-4 text-sm text-slate-400"
-                : "mt-4 text-sm text-slate-500"
-            }
-          >
-            Showing <strong>{totalRequests}</strong> of{" "}
-            <strong>{requests.length}</strong> requests
+          <div className="mt-4 text-sm font-medium">
+            Showing{" "}
+            <span className="font-bold text-[#008C95]">
+              {totalRequests}
+            </span>{" "}
+            of{" "}
+            <span className="font-bold">
+              {requests.length}
+            </span>{" "}
+            requests
           </div>
         </section>
 
-        {/* =========================
+        {/* =======================================================
             KPI CARDS
-        ========================= */}
+        ======================================================== */}
 
-        <section className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-
+        <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <KpiCard
             title="Total Requests"
             value={totalRequests}
-            subtitle="Current workload"
+            subtitle="Current filtered workload"
             darkMode={darkMode}
           />
 
@@ -443,231 +734,301 @@ export default function Home() {
           <KpiCard
             title="Pending"
             value={pendingRequests.length}
-            subtitle="Requests awaiting action"
+            subtitle="Requests requiring follow-up"
             darkMode={darkMode}
           />
 
           <KpiCard
             title="Avg. Turnaround"
             value={`${averageTurnaround.toFixed(1)} days`}
-            subtitle="Resolved requests"
+            subtitle="Resolved requests only"
             darkMode={darkMode}
           />
-
         </section>
 
-        {/* =========================
-            CHARTS
-        ========================= */}
+        {/* =======================================================
+            STATUS + BRANCH
+        ======================================================== */}
 
-        <section className="mb-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
-
+        <section className="grid gap-6 lg:grid-cols-2">
           {/* STATUS DISTRIBUTION */}
 
           <div
-            className={
-              darkMode
-                ? "rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-sm"
-                : "rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
-            }
+            className={`rounded-xl border p-5 shadow-sm ${cardBackground}`}
           >
-            <h2 className="text-lg font-bold">
-              Request Status Distribution
-            </h2>
+            <div className="mb-4">
+              <h2 className="text-lg font-bold">
+                Request Status Distribution
+              </h2>
 
-            <p
-              className={
-                darkMode
-                  ? "mb-4 text-sm text-slate-400"
-                  : "mb-4 text-sm text-slate-500"
-              }
-            >
-              Current workload composition.
-            </p>
-
-            <div className="h-72">
-
-              {totalRequests > 0 ? (
-
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-
-                    <Pie
-                      data={statusData}
-                      dataKey="value"
-                      nameKey="name"
-                      cx="50%"
-                      cy="50%"
-                      outerRadius={90}
-                      label
-                    >
-                      {statusData.map((entry) => (
-                        <Cell
-                          key={entry.name}
-                          fill={entry.color}
-                        />
-                      ))}
-                    </Pie>
-
-                    <Tooltip />
-
-                  </PieChart>
-                </ResponsiveContainer>
-
-              ) : (
-
-                <EmptyState darkMode={darkMode} />
-
-              )}
-
+              <p className={`text-sm ${mutedText}`}>
+                Current composition of the filtered workload.
+              </p>
             </div>
 
-            <div className="mt-2 grid grid-cols-3 gap-2 text-center">
+            <div className="h-72">
+              <ResponsiveContainer
+                width="100%"
+                height="100%"
+              >
+                <PieChart>
+                  <Pie
+                    data={statusData}
+                    dataKey="value"
+                    nameKey="name"
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={90}
+                    label
+                  >
+                    {statusData.map((entry) => (
+                      <Cell
+                        key={entry.name}
+                        fill={
+                          STATUS_COLORS[
+                            entry.name as keyof typeof STATUS_COLORS
+                          ]
+                        }
+                      />
+                    ))}
+                  </Pie>
 
-              <StatusMini
-                label="Resolved"
-                value={resolvedRequests.length}
-                darkMode={darkMode}
-              />
+                  <Tooltip />
 
-              <StatusMini
-                label="Pending"
-                value={pendingRequests.length}
-                darkMode={darkMode}
-              />
-
-              <StatusMini
-                label="In Progress"
-                value={inProgressRequests.length}
-                darkMode={darkMode}
-              />
-
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
             </div>
           </div>
 
           {/* BRANCH PERFORMANCE */}
 
           <div
-            className={
-              darkMode
-                ? "rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-sm"
-                : "rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
-            }
+            className={`rounded-xl border p-5 shadow-sm ${cardBackground}`}
           >
-            <h2 className="text-lg font-bold">
-              Branch Performance
-            </h2>
+            <div className="mb-4">
+              <h2 className="text-lg font-bold">
+                Branch Performance
+              </h2>
 
-            <p
-              className={
-                darkMode
-                  ? "mb-4 text-sm text-slate-400"
-                  : "mb-4 text-sm text-slate-500"
-              }
-            >
-              Resolution rate by branch.
-            </p>
+              <p className={`text-sm ${mutedText}`}>
+                Resolution rate by branch.
+              </p>
+            </div>
 
             <div className="h-72">
-
-              <ResponsiveContainer width="100%" height="100%">
-
+              <ResponsiveContainer
+                width="100%"
+                height="100%"
+              >
                 <BarChart data={branchData}>
-
-                  <CartesianGrid
-                    strokeDasharray="3 3"
-                    opacity={darkMode ? 0.15 : 0.5}
-                  />
+                  <CartesianGrid strokeDasharray="3 3" />
 
                   <XAxis dataKey="branch" />
 
-                  <YAxis
-                    domain={[0, 100]}
-                    tickFormatter={(value) => `${value}%`}
-                  />
+                  <YAxis />
 
-                  <Tooltip
-                    formatter={(value) => `${value}%`}
-                  />
+                  <Tooltip />
 
                   <Bar
                     dataKey="resolutionRate"
-                    name="Resolution Rate"
-                    fill="#007C83"
+                    name="Resolution Rate %"
+                    fill="#008C95"
                     radius={[6, 6, 0, 0]}
                   />
-
                 </BarChart>
-
               </ResponsiveContainer>
-
             </div>
           </div>
-
         </section>
 
-        {/* =========================
-            SERVICE REQUEST DETAILS
-        ========================= */}
+        {/* =======================================================
+            CUSTOMER SATISFACTION
+        ======================================================== */}
 
         <section
-          className={
-            darkMode
-              ? "overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 shadow-sm"
-              : "overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
-          }
+          id="feedback"
+          className={`rounded-xl border p-5 shadow-sm ${cardBackground}`}
         >
+          <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h2 className="text-lg font-bold">
+                Member Satisfaction & Feedback
+              </h2>
 
-          <div className="p-5">
-
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-
-              <div>
-
-                <h2 className="text-lg font-bold">
-                  Service Request Details
-                </h2>
-
-                <p
-                  className={
-                    darkMode
-                      ? "text-sm text-slate-400"
-                      : "text-sm text-slate-500"
-                  }
-                >
-                  Detailed view of the currently filtered requests.
-                </p>
-
-              </div>
-
-              <div
-                className={
-                  darkMode
-                    ? "text-sm text-slate-400"
-                    : "text-sm text-slate-500"
-                }
-              >
-                Showing {startRecord}–{endRecord} of {totalRequests}
-              </div>
-
+              <p className={`text-sm ${mutedText}`}>
+                Prototype / dummy feedback analysis. Real
+                production feedback would come from the approved
+                member-service source.
+              </p>
             </div>
 
+            <span className="w-fit rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-700">
+              PROTOTYPE DATA
+            </span>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-3">
+            <KpiCard
+              title="Average Rating"
+              value={`${averageSatisfaction.toFixed(1)} / 5`}
+              subtitle="Prototype feedback sample"
+              darkMode={darkMode}
+            />
+
+            <KpiCard
+              title="Feedback Responses"
+              value={filteredFeedback.length}
+              subtitle="Prototype responses"
+              darkMode={darkMode}
+            />
+
+            <KpiCard
+              title="Positive Feedback"
+              value={`${positiveFeedbackPercentage.toFixed(
+                1
+              )}%`}
+              subtitle="Ratings of 4 or 5"
+              darkMode={darkMode}
+            />
+          </div>
+
+          <div className="mt-6 h-72">
+            <ResponsiveContainer
+              width="100%"
+              height="100%"
+            >
+              <BarChart data={satisfactionDistribution}>
+                <CartesianGrid strokeDasharray="3 3" />
+
+                <XAxis dataKey="rating" />
+
+                <YAxis allowDecimals={false} />
+
+                <Tooltip />
+
+                <Bar
+                  dataKey="count"
+                  name="Responses"
+                  fill="#008C95"
+                  radius={[6, 6, 0, 0]}
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </section>
+
+        {/* =======================================================
+            CONTACT CHANNEL
+        ======================================================== */}
+
+        <section
+          className={`rounded-xl border p-5 shadow-sm ${cardBackground}`}
+        >
+          <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h2 className="text-lg font-bold">
+                Member Contact Channels
+              </h2>
+
+              <p className={`text-sm ${mutedText}`}>
+                Prototype analysis of how members may contact
+                the service team.
+              </p>
+            </div>
+
+            <span className="w-fit rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-700">
+              PROTOTYPE DATA
+            </span>
+          </div>
+
+          <div className="grid gap-6 lg:grid-cols-2">
+            <div className="h-72">
+              <ResponsiveContainer
+                width="100%"
+                height="100%"
+              >
+                <PieChart>
+                  <Pie
+                    data={channelData}
+                    dataKey="value"
+                    nameKey="name"
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={90}
+                    label
+                  >
+                    {channelData.map((entry, index) => (
+                      <Cell
+                        key={entry.name}
+                        fill={
+                          CHANNEL_COLORS[
+                            index % CHANNEL_COLORS.length
+                          ]
+                        }
+                      />
+                    ))}
+                  </Pie>
+
+                  <Tooltip />
+
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div className="flex flex-col justify-center">
+              <div
+                className={`rounded-lg p-5 ${
+                  darkMode
+                    ? "bg-slate-800"
+                    : "bg-slate-50"
+                }`}
+              >
+                <p
+                  className={`text-sm font-medium ${mutedText}`}
+                >
+                  Leading prototype channel
+                </p>
+
+                <p className="mt-2 text-3xl font-bold text-[#008C95]">
+                  {topChannel}
+                </p>
+
+                <p
+                  className={`mt-3 text-sm leading-6 ${mutedText}`}
+                >
+                  In a production dashboard, this analysis
+                  would help management understand member
+                  behaviour and identify opportunities to
+                  improve digital channels such as the chatbot.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* =======================================================
+            SERVICE REQUEST TABLE
+        ======================================================== */}
+
+        <section
+          className={`rounded-xl border shadow-sm ${cardBackground}`}
+        >
+          <div className="border-b border-slate-200 p-5 dark:border-slate-800">
+            <h2 className="text-lg font-bold">
+              Service Request Details
+            </h2>
+
+            <p className={`mt-1 text-sm ${mutedText}`}>
+              Detailed records behind the dashboard summaries.
+            </p>
           </div>
 
           <div className="overflow-x-auto">
-
             <table className="min-w-full text-left text-sm">
-
-              <thead
-                className={
-                  darkMode
-                    ? "bg-slate-800 text-slate-200"
-                    : "bg-slate-100 text-slate-700"
-                }
-              >
-
+              <thead className={tableHeader}>
                 <tr>
-
                   <th className="px-5 py-3 font-semibold">
                     Request ID
                   </th>
@@ -691,195 +1052,298 @@ export default function Home() {
                   <th className="px-5 py-3 font-semibold">
                     Turnaround
                   </th>
-
                 </tr>
-
               </thead>
 
               <tbody>
+                {displayedRequests.length > 0 ? (
+                  displayedRequests.map((request) => (
+                    <tr
+                      key={request.request_id}
+                      className={`border-t ${tableRow}`}
+                    >
+                      <td className="px-5 py-4 font-semibold">
+                        {request.request_id}
+                      </td>
 
-                {displayedRequests.map((request) => (
+                      <td className="px-5 py-4">
+                        {request.branch}
+                      </td>
 
-                  <tr
-                    key={request.request_id}
-                    className={
-                      darkMode
-                        ? "border-t border-slate-800 hover:bg-slate-800/60"
-                        : "border-t border-slate-200 hover:bg-slate-50"
-                    }
-                  >
+                      <td className="px-5 py-4">
+                        {request.request_type}
+                      </td>
 
-                    <td className="whitespace-nowrap px-5 py-3 font-medium">
-                      {request.request_id}
-                    </td>
+                      <td className="px-5 py-4">
+                        <PriorityBadge
+                          priority={request.priority}
+                        />
+                      </td>
 
-                    <td className="whitespace-nowrap px-5 py-3">
-                      {request.branch}
-                    </td>
+                      <td className="px-5 py-4">
+                        <StatusBadge
+                          status={request.status}
+                        />
+                      </td>
 
-                    <td className="whitespace-nowrap px-5 py-3">
-                      {request.request_type}
-                    </td>
-
-                    <td className="whitespace-nowrap px-5 py-3">
-                      <PriorityBadge priority={request.priority} />
-                    </td>
-
-                    <td className="whitespace-nowrap px-5 py-3">
-                      <StatusBadge status={request.status} />
-                    </td>
-
-                    <td className="whitespace-nowrap px-5 py-3">
-                      {request.status === "Resolved"
-                        ? `${request.turnaround_days} days`
-                        : "—"}
-                    </td>
-
-                  </tr>
-
-                ))}
-
-                {displayedRequests.length === 0 && (
-
+                      <td className="px-5 py-4">
+                        {request.status === "Resolved"
+                          ? `${request.turnaround_days} days`
+                          : "—"}
+                      </td>
+                    </tr>
+                  ))
+                ) : (
                   <tr>
-
                     <td
                       colSpan={6}
-                      className="px-5 py-10 text-center"
+                      className={`px-5 py-10 text-center ${mutedText}`}
                     >
-                      No service requests match the selected filters.
+                      No requests match the current search
+                      and filters.
                     </td>
-
                   </tr>
-
                 )}
-
               </tbody>
-
             </table>
-
           </div>
 
           {/* PAGINATION */}
 
-          <div
-            className={
-              darkMode
-                ? "flex flex-col gap-3 border-t border-slate-800 p-5 sm:flex-row sm:items-center sm:justify-between"
-                : "flex flex-col gap-3 border-t border-slate-200 p-5 sm:flex-row sm:items-center sm:justify-between"
-            }
-          >
+          <div className="flex flex-col gap-4 border-t border-slate-200 p-5 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between">
+            <p className={`text-sm ${mutedText}`}>
+              Showing{" "}
+              {totalRequests === 0
+                ? 0
+                : startIndex + 1}{" "}
+              – {endIndex} of {totalRequests} requests
+            </p>
 
-            <div>
-
-              <p
-                className={
-                  darkMode
-                    ? "text-sm text-slate-400"
-                    : "text-sm text-slate-500"
-                }
-              >
-                Showing 10 records per page where available.
-              </p>
-
-              <p
-                className={
-                  darkMode
-                    ? "text-sm text-slate-400"
-                    : "text-sm text-slate-500"
-                }
-              >
-                Page {safeCurrentPage} of {totalPages}
-              </p>
-
-            </div>
-
-            <div className="flex items-center gap-2">
-
+            <div className="flex flex-wrap items-center gap-2">
               <button
-                onClick={() => goToPage(safeCurrentPage - 1)}
-                disabled={safeCurrentPage === 1}
-                className={
-                  safeCurrentPage === 1
-                    ? "cursor-not-allowed rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-400 opacity-50"
-                    : "rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium transition hover:bg-slate-100"
+                type="button"
+                onClick={() =>
+                  goToPage(safeCurrentPage - 1)
                 }
+                disabled={safeCurrentPage === 1}
+                className={`rounded-lg border px-3 py-2 text-sm font-medium ${
+                  safeCurrentPage === 1
+                    ? "cursor-not-allowed opacity-40"
+                    : "hover:border-[#008C95] hover:text-[#008C95]"
+                }`}
               >
                 ← Previous
               </button>
 
-              <div className="hidden items-center gap-1 sm:flex">
-
-                {Array.from(
-                  { length: totalPages },
-                  (_, index) => index + 1
-                )
-                  .slice(
-                    Math.max(0, safeCurrentPage - 3),
-                    Math.min(totalPages, safeCurrentPage + 2)
-                  )
-                  .map((page) => (
-
-                    <button
-                      key={page}
-                      onClick={() => goToPage(page)}
-                      className={
-                        page === safeCurrentPage
-                          ? "rounded-lg bg-[#007C83] px-3 py-2 text-sm font-semibold text-white"
-                          : darkMode
-                          ? "rounded-lg border border-slate-700 px-3 py-2 text-sm text-slate-300 hover:bg-slate-800"
-                          : "rounded-lg border border-slate-300 px-3 py-2 text-sm hover:bg-slate-100"
-                      }
-                    >
-                      {page}
-                    </button>
-
-                  ))}
-
-              </div>
+              {Array.from(
+                { length: totalPages },
+                (_, index) => index + 1
+              ).map((page) => (
+                <button
+                  key={page}
+                  type="button"
+                  onClick={() => goToPage(page)}
+                  className={`rounded-lg px-3 py-2 text-sm font-semibold ${
+                    page === safeCurrentPage
+                      ? "bg-[#008C95] text-white"
+                      : "border hover:border-[#008C95] hover:text-[#008C95]"
+                  }`}
+                >
+                  {page}
+                </button>
+              ))}
 
               <button
-                onClick={() => goToPage(safeCurrentPage + 1)}
-                disabled={safeCurrentPage === totalPages}
-                className={
-                  safeCurrentPage === totalPages
-                    ? "cursor-not-allowed rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-400 opacity-50"
-                    : "rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium transition hover:bg-slate-100"
+                type="button"
+                onClick={() =>
+                  goToPage(safeCurrentPage + 1)
                 }
+                disabled={
+                  safeCurrentPage === totalPages
+                }
+                className={`rounded-lg border px-3 py-2 text-sm font-medium ${
+                  safeCurrentPage === totalPages
+                    ? "cursor-not-allowed opacity-40"
+                    : "hover:border-[#008C95] hover:text-[#008C95]"
+                }`}
               >
                 Next →
               </button>
-
             </div>
-
           </div>
 
+          <div className={`px-5 pb-5 text-xs ${mutedText}`}>
+            The table displays 10 records per page where
+            available. KPI calculations use the complete
+            filtered dataset.
+          </div>
         </section>
 
-        {/* =========================
-            FOOTER
-        ========================= */}
+        {/* =======================================================
+            REPORTS
+        ======================================================== */}
+
+        <section
+          id="reports"
+          className={`rounded-xl border p-5 shadow-sm ${cardBackground}`}
+        >
+          <div className="mb-5">
+            <h2 className="text-lg font-bold">
+              Reports & Export
+            </h2>
+
+            <p className={`mt-1 text-sm ${mutedText}`}>
+              Export the currently filtered service-request
+              records for further analysis or reporting.
+            </p>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div
+              className={`rounded-lg border p-5 ${
+                darkMode
+                  ? "border-slate-700 bg-slate-800"
+                  : "border-slate-200 bg-slate-50"
+              }`}
+            >
+              <h3 className="font-bold">
+                Current Report
+              </h3>
+
+              <p className={`mt-2 text-sm ${mutedText}`}>
+                {totalRequests} requests currently match the
+                selected filters and search criteria.
+              </p>
+
+              <button
+                type="button"
+                onClick={exportCSV}
+                className="mt-4 rounded-lg bg-[#008C95] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#006970]"
+              >
+                Export Filtered Data CSV
+              </button>
+            </div>
+
+            <div
+              className={`rounded-lg border p-5 ${
+                darkMode
+                  ? "border-slate-700 bg-slate-800"
+                  : "border-slate-200 bg-slate-50"
+              }`}
+            >
+              <h3 className="font-bold">
+                Operational Summary
+              </h3>
+
+              <div className={`mt-3 space-y-2 text-sm ${mutedText}`}>
+                <p>
+                  Total workload:{" "}
+                  <strong>{totalRequests}</strong>
+                </p>
+
+                <p>
+                  Resolved:{" "}
+                  <strong>
+                    {resolvedRequests.length}
+                  </strong>
+                </p>
+
+                <p>
+                  Pending:{" "}
+                  <strong>
+                    {pendingRequests.length}
+                  </strong>
+                </p>
+
+                <p>
+                  Resolution rate:{" "}
+                  <strong>
+                    {resolutionRate.toFixed(1)}%
+                  </strong>
+                </p>
+
+                <p>
+                  Average turnaround:{" "}
+                  <strong>
+                    {averageTurnaround.toFixed(1)} days
+                  </strong>
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* =======================================================
+            AI INSIGHTS
+        ======================================================== */}
+
+        <section
+          id="ai-insights"
+          className={`rounded-xl border p-5 shadow-sm ${cardBackground}`}
+        >
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-lg font-bold">
+                AI Insights
+              </h2>
+
+              <p className={`mt-1 text-sm ${mutedText}`}>
+                Reserved space for future AI-powered service
+                request analysis.
+              </p>
+            </div>
+
+            <span className="w-fit rounded-full bg-slate-200 px-3 py-1 text-xs font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+              COMING NEXT
+            </span>
+          </div>
+
+          <div
+            className={`mt-5 rounded-lg border p-5 ${
+              darkMode
+                ? "border-slate-700 bg-slate-800"
+                : "border-slate-200 bg-slate-50"
+            }`}
+          >
+            <h3 className="font-bold">
+              Planned AI capability
+            </h3>
+
+            <p className={`mt-2 text-sm leading-6 ${mutedText}`}>
+              A future version could use AI to identify
+              recurring request themes, summarise member
+              feedback, highlight unusual workload patterns
+              and suggest areas requiring management attention.
+            </p>
+          </div>
+        </section>
+
+        {/* =======================================================
+            PROTOTYPE NOTE
+        ======================================================== */}
 
         <footer
-          className={
-            darkMode
-              ? "mt-6 border-t border-slate-800 py-5 text-center text-sm text-slate-500"
-              : "mt-6 border-t border-slate-200 py-5 text-center text-sm text-slate-500"
-          }
+          className={`rounded-xl border p-5 text-sm ${cardBackground}`}
         >
-          CPF Financial Services · Member Service Request Dashboard
-          <br />
-          Prototype using dummy data
+          <p className={`leading-6 ${mutedText}`}>
+            <strong className="text-[#008C95]">
+              Prototype notice:
+            </strong>{" "}
+            This dashboard uses dummy CPF-style service-request
+            data for demonstration and development. The
+            satisfaction and contact-channel sections are
+            prototype examples and should be connected to
+            approved production data before operational use.
+          </p>
         </footer>
-
       </div>
     </main>
   );
 }
 
-/* =========================
-   FILTER COMPONENT
-========================= */
+/* =============================================================
+   REUSABLE FILTER COMPONENT
+============================================================= */
 
 function FilterSelect({
   label,
@@ -896,36 +1360,34 @@ function FilterSelect({
 }) {
   return (
     <div>
-
       <label className="mb-2 block text-sm font-semibold">
         {label}
       </label>
 
       <select
         value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className={
-          darkMode
-            ? "w-full rounded-xl border border-slate-700 bg-slate-800 px-3 py-2.5 text-sm text-white outline-none focus:border-[#007C83] focus:ring-2 focus:ring-[#007C83]/20"
-            : "w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-[#007C83] focus:ring-2 focus:ring-[#007C83]/20"
+        onChange={(event) =>
+          onChange(event.target.value)
         }
+        className={`w-full rounded-lg border px-3 py-3 text-sm outline-none focus:border-[#008C95] focus:ring-2 focus:ring-[#008C95]/20 ${
+          darkMode
+            ? "border-slate-700 bg-slate-800 text-white"
+            : "border-slate-300 bg-white text-slate-900"
+        }`}
       >
-
         {options.map((option) => (
           <option key={option} value={option}>
             {option}
           </option>
         ))}
-
       </select>
-
     </div>
   );
 }
 
-/* =========================
+/* =============================================================
    KPI CARD
-========================= */
+============================================================= */
 
 function KpiCard({
   title,
@@ -940,147 +1402,82 @@ function KpiCard({
 }) {
   return (
     <div
-      className={
-        darkMode
-          ? "rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-sm"
-          : "rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
-      }
+      className={`rounded-xl border p-5 shadow-sm ${darkMode
+        ? "border-slate-800 bg-slate-900"
+        : "border-slate-200 bg-white"
+      }`}
     >
-
-      <p
-        className={
-          darkMode
-            ? "text-sm font-medium text-slate-400"
-            : "text-sm font-medium text-slate-500"
-        }
-      >
+      <p className="text-sm font-semibold text-[#008C95]">
         {title}
       </p>
 
-      <p className="mt-2 text-3xl font-bold tracking-tight">
+      <p className="mt-2 text-3xl font-bold">
         {value}
       </p>
-
-      <p className="mt-1 text-sm font-medium text-[#007C83]">
-        {subtitle}
-      </p>
-
-    </div>
-  );
-}
-
-/* =========================
-   STATUS MINI CARD
-========================= */
-
-function StatusMini({
-  label,
-  value,
-  darkMode,
-}: {
-  label: string;
-  value: number;
-  darkMode: boolean;
-}) {
-  return (
-    <div
-      className={
-        darkMode
-          ? "rounded-xl bg-slate-800 p-3"
-          : "rounded-xl bg-slate-50 p-3"
-      }
-    >
 
       <p
-        className={
+        className={`mt-2 text-xs ${
           darkMode
-            ? "text-xs text-slate-400"
-            : "text-xs text-slate-500"
-        }
+            ? "text-slate-400"
+            : "text-slate-500"
+        }`}
       >
-        {label}
+        {subtitle}
       </p>
-
-      <p className="mt-1 text-xl font-bold">
-        {value}
-      </p>
-
     </div>
   );
 }
 
-/* =========================
+/* =============================================================
    STATUS BADGE
-========================= */
+============================================================= */
 
 function StatusBadge({
   status,
 }: {
   status: Status;
 }) {
-  const classes =
-    status === "Resolved"
-      ? "bg-emerald-100 text-emerald-700"
-      : status === "Pending"
-      ? "bg-amber-100 text-amber-700"
-      : "bg-slate-100 text-slate-700";
+  const styles = {
+    Resolved:
+      "bg-emerald-100 text-emerald-700",
+    Pending:
+      "bg-amber-100 text-amber-700",
+    "In Progress":
+      "bg-slate-200 text-slate-700",
+  };
 
   return (
     <span
-      className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${classes}`}
+      className={`inline-flex rounded-full px-3 py-1 text-xs font-bold ${styles[status]}`}
     >
       {status}
     </span>
   );
 }
 
-/* =========================
+/* =============================================================
    PRIORITY BADGE
-========================= */
+============================================================= */
 
 function PriorityBadge({
   priority,
 }: {
   priority: Priority;
 }) {
-  const classes =
-    priority === "Urgent"
-      ? "bg-red-100 text-red-700"
-      : priority === "High"
-      ? "bg-orange-100 text-orange-700"
-      : "bg-blue-100 text-blue-700";
+  const styles = {
+    Normal:
+      "bg-slate-100 text-slate-700",
+    High:
+      "bg-orange-100 text-orange-700",
+    Urgent:
+      "bg-red-100 text-red-700",
+  };
 
   return (
     <span
-      className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${classes}`}
+      className={`inline-flex rounded-full px-3 py-1 text-xs font-bold ${styles[priority]}`}
     >
       {priority}
     </span>
-  );
-}
-
-/* =========================
-   EMPTY STATE
-========================= */
-
-function EmptyState({
-  darkMode,
-}: {
-  darkMode: boolean;
-}) {
-  return (
-    <div className="flex h-full items-center justify-center">
-
-      <p
-        className={
-          darkMode
-            ? "text-sm text-slate-500"
-            : "text-sm text-slate-400"
-        }
-      >
-        No data available for the selected filters.
-      </p>
-
-    </div>
   );
 }
