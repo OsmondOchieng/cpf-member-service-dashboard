@@ -31,12 +31,7 @@ type ServiceRequest = {
 
 const PAGE_SIZE = 10;
 
-const STATUS_OPTIONS = [
-  "All",
-  "Resolved",
-  "Pending",
-  "In Progress",
-];
+const STATUS_OPTIONS = ["All", "Resolved", "Pending", "In Progress"];
 
 const BRANCH_OPTIONS = [
   "All",
@@ -47,22 +42,17 @@ const BRANCH_OPTIONS = [
   "Nakuru",
 ];
 
-const PRIORITY_OPTIONS = [
-  "All",
-  "Normal",
-  "High",
-  "Urgent",
-];
+const PRIORITY_OPTIONS = ["All", "Normal", "High", "Urgent"];
 
 const STATUS_COLORS = {
-  Resolved: "#008C95",
-  Pending: "#F5A623",
+  Resolved: "#42A4C1",
+  Pending: "#EC006A",
   "In Progress": "#64748B",
 };
 
 const CHANNEL_COLORS = [
-  "#008C95",
-  "#F5A623",
+  "#42A4C1",
+  "#EC006A",
   "#64748B",
   "#94A3B8",
 ];
@@ -70,10 +60,14 @@ const CHANNEL_COLORS = [
 const requests = requestData as ServiceRequest[];
 
 /*
-  Prototype feedback data.
-  The original dummy service-request dataset does not contain
-  actual member satisfaction ratings.
+  The original service-request dataset does not contain member
+  satisfaction or contact-channel fields.
+
+  These two sections therefore use clearly labelled prototype
+  data to demonstrate how the dashboard can support those
+  future business requirements.
 */
+
 const prototypeFeedbackData = requests.map((request, index) => {
   const ratings = [5, 4, 4, 5, 3, 4, 5, 4, 3, 5];
 
@@ -83,18 +77,8 @@ const prototypeFeedbackData = requests.map((request, index) => {
   };
 });
 
-/*
-  Prototype contact-channel data.
-  Production data should come from the approved member-service source.
-*/
 const prototypeChannelData = requests.map((request, index) => {
-  const channels = [
-    "Email",
-    "Email",
-    "Chatbot",
-    "Phone",
-    "Branch",
-  ];
+  const channels = ["Email", "Email", "Chatbot", "Phone", "Branch"];
 
   return {
     ...request,
@@ -102,7 +86,7 @@ const prototypeChannelData = requests.map((request, index) => {
   };
 });
 
-export default function DashboardPage() {
+export default function Dashboard() {
   const [statusFilter, setStatusFilter] = useState("All");
   const [branchFilter, setBranchFilter] = useState("All");
   const [requestTypeFilter, setRequestTypeFilter] = useState("All");
@@ -111,26 +95,23 @@ export default function DashboardPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [darkMode, setDarkMode] = useState(false);
 
-  const requestTypes = useMemo(() => {
-    return [
-      "All",
-      ...Array.from(
-        new Set(requests.map((request) => request.request_type))
-      ),
-    ];
+  const requestTypeOptions = useMemo(() => {
+    const types = Array.from(
+      new Set(requests.map((request) => request.request_type))
+    );
+
+    return ["All", ...types];
   }, []);
 
   const filteredRequests = useMemo(() => {
-    const search = searchTerm.trim().toLowerCase();
+    const search = searchTerm.toLowerCase().trim();
 
     return requests.filter((request) => {
       const matchesStatus =
-        statusFilter === "All" ||
-        request.status === statusFilter;
+        statusFilter === "All" || request.status === statusFilter;
 
       const matchesBranch =
-        branchFilter === "All" ||
-        request.branch === branchFilter;
+        branchFilter === "All" || request.branch === branchFilter;
 
       const matchesRequestType =
         requestTypeFilter === "All" ||
@@ -164,10 +145,6 @@ export default function DashboardPage() {
     searchTerm,
   ]);
 
-  /*
-    KPI calculations use the complete filtered dataset,
-    not only the 10 records currently visible in the table.
-  */
   const totalRequests = filteredRequests.length;
 
   const resolvedRequests = filteredRequests.filter(
@@ -195,6 +172,20 @@ export default function DashboardPage() {
         ) / resolvedRequests.length
       : 0;
 
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filteredRequests.length / PAGE_SIZE)
+  );
+
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+
+  const startIndex = (safeCurrentPage - 1) * PAGE_SIZE;
+
+  const displayedRequests = filteredRequests.slice(
+    startIndex,
+    startIndex + PAGE_SIZE
+  );
+
   const statusData = [
     {
       name: "Resolved",
@@ -210,117 +201,92 @@ export default function DashboardPage() {
     },
   ];
 
-  const branchPerformance = BRANCH_OPTIONS.filter(
-    (branch) => branch !== "All"
-  ).map((branch) => {
-    const branchRequests = filteredRequests.filter(
-      (request) => request.branch === branch
+  const branchPerformance = useMemo(() => {
+    const branches = Array.from(
+      new Set(filteredRequests.map((request) => request.branch))
     );
 
-    const branchResolved = branchRequests.filter(
-      (request) => request.status === "Resolved"
-    );
+    return branches.map((branch) => {
+      const branchRequests = filteredRequests.filter(
+        (request) => request.branch === branch
+      );
 
-    const branchResolutionRate =
-      branchRequests.length > 0
-        ? (branchResolved.length / branchRequests.length) * 100
-        : 0;
+      const branchResolved = branchRequests.filter(
+        (request) => request.status === "Resolved"
+      );
 
-    const branchAverageTurnaround =
-      branchResolved.length > 0
-        ? branchResolved.reduce(
-            (sum, request) => sum + request.turnaround_days,
-            0
-          ) / branchResolved.length
-        : 0;
+      const branchResolutionRate =
+        branchRequests.length > 0
+          ? (branchResolved.length / branchRequests.length) * 100
+          : 0;
 
-    return {
-      branch,
-      requests: branchRequests.length,
-      resolutionRate: Number(branchResolutionRate.toFixed(1)),
-      averageTurnaround: Number(
-        branchAverageTurnaround.toFixed(1)
-      ),
-    };
-  });
+      const branchAverage =
+        branchResolved.length > 0
+          ? branchResolved.reduce(
+              (sum, request) => sum + request.turnaround_days,
+              0
+            ) / branchResolved.length
+          : 0;
 
-  const filteredRequestIds = new Set(
-    filteredRequests.map((request) => request.request_id)
+      return {
+        branch,
+        requests: branchRequests.length,
+        resolved: branchResolved.length,
+        resolutionRate: Number(branchResolutionRate.toFixed(1)),
+        averageTurnaround: Number(branchAverage.toFixed(1)),
+      };
+    });
+  }, [filteredRequests]);
+
+  const feedbackData = prototypeFeedbackData.filter((feedback) =>
+    filteredRequests.some(
+      (request) => request.request_id === feedback.request_id
+    )
   );
 
-  const filteredFeedback = prototypeFeedbackData.filter(
-    (item) => filteredRequestIds.has(item.request_id)
-  );
+  const averageSatisfaction =
+    feedbackData.length > 0
+      ? feedbackData.reduce(
+          (sum, item) => sum + item.feedback_rating,
+          0
+        ) / feedbackData.length
+      : 0;
 
-  const feedbackRatingData = [1, 2, 3, 4, 5].map((rating) => ({
+  const positiveFeedback =
+    feedbackData.length > 0
+      ? (feedbackData.filter(
+          (item) => item.feedback_rating >= 4
+        ).length /
+          feedbackData.length) *
+        100
+      : 0;
+
+  const ratingDistribution = [1, 2, 3, 4, 5].map((rating) => ({
     rating: `${rating} Star`,
-    responses: filteredFeedback.filter(
+    responses: feedbackData.filter(
       (item) => item.feedback_rating === rating
     ).length,
   }));
 
-  const averageSatisfaction =
-    filteredFeedback.length > 0
-      ? filteredFeedback.reduce(
-          (sum, item) => sum + item.feedback_rating,
-          0
-        ) / filteredFeedback.length
-      : 0;
-
-  const positiveFeedback =
-    filteredFeedback.length > 0
-      ? (filteredFeedback.filter(
-          (item) => item.feedback_rating >= 4
-        ).length /
-          filteredFeedback.length) *
-        100
-      : 0;
-
-  const filteredChannels = prototypeChannelData.filter(
-    (item) => filteredRequestIds.has(item.request_id)
+  const channelData = ["Email", "Chatbot", "Phone", "Branch"].map(
+    (channel) => ({
+      name: channel,
+      value: prototypeChannelData.filter(
+        (item) =>
+          item.contact_channel === channel &&
+          filteredRequests.some(
+            (request) => request.request_id === item.request_id
+          )
+      ).length,
+    })
   );
-
-  const channelNames = [
-    "Email",
-    "Chatbot",
-    "Phone",
-    "Branch",
-  ];
-
-  const channelData = channelNames.map((channel) => ({
-    name: channel,
-    value: filteredChannels.filter(
-      (item) => item.contact_channel === channel
-    ).length,
-  }));
 
   const topChannel =
     channelData.length > 0
-      ? channelData.reduce((top, current) =>
-          current.value > top.value ? current : top
+      ? channelData.reduce((previous, current) =>
+          current.value > previous.value ? current : previous
         )
       : null;
-
-  /*
-    Pagination
-  */
-  const totalPages = Math.max(
-    1,
-    Math.ceil(totalRequests / PAGE_SIZE)
-  );
-
-  const safeCurrentPage = Math.min(
-    currentPage,
-    totalPages
-  );
-
-  const startIndex =
-    (safeCurrentPage - 1) * PAGE_SIZE;
-
-  const displayedRequests = filteredRequests.slice(
-    startIndex,
-    startIndex + PAGE_SIZE
-  );
 
   const resetFilters = () => {
     setStatusFilter("All");
@@ -328,6 +294,14 @@ export default function DashboardPage() {
     setRequestTypeFilter("All");
     setPriorityFilter("All");
     setSearchTerm("");
+    setCurrentPage(1);
+  };
+
+  const handleFilterChange = (
+    setter: React.Dispatch<React.SetStateAction<string>>,
+    value: string
+  ) => {
+    setter(value);
     setCurrentPage(1);
   };
 
@@ -351,25 +325,21 @@ export default function DashboardPage() {
     ]);
 
     const csvContent = [
-      headers,
-      ...rows,
-    ]
-      .map((row) =>
+      headers.join(","),
+      ...rows.map((row) =>
         row
-          .map((value) =>
-            `"${String(value).replace(/"/g, '""')}"`
-          )
+          .map((value) => `"${String(value).replace(/"/g, '""')}"`)
           .join(",")
-      )
-      .join("\n");
+      ),
+    ].join("\n");
 
     const blob = new Blob([csvContent], {
       type: "text/csv;charset=utf-8;",
     });
 
     const url = URL.createObjectURL(blob);
-
     const link = document.createElement("a");
+
     link.href = url;
     link.download = "cpf-member-service-report.csv";
     link.click();
@@ -378,13 +348,7 @@ export default function DashboardPage() {
   };
 
   return (
-    <main
-      className={`dashboard-shell ${
-        darkMode ? "dark-mode" : ""
-      }`}
-    >
-      {/* ================= HEADER ================= */}
-
+    <main className={darkMode ? "dashboard dark-mode" : "dashboard"}>
       <header className="top-header">
         <div className="header-inner">
           <div className="brand-area">
@@ -394,8 +358,8 @@ export default function DashboardPage() {
               className="cpf-logo"
             />
 
-            <div className="brand-copy">
-              <div className="organization-name">
+            <div className="brand-text">
+              <div className="company-name">
                 CPF FINANCIAL SERVICES
               </div>
 
@@ -409,16 +373,14 @@ export default function DashboardPage() {
           </div>
 
           <button
-            type="button"
-            className="theme-toggle"
+            className="theme-button"
             onClick={() => setDarkMode(!darkMode)}
-            aria-label="Toggle dark mode"
           >
             {darkMode ? "☀ Light Mode" : "☾ Dark Mode"}
           </button>
         </div>
 
-        <nav className="main-navigation">
+        <nav className="main-nav">
           <a href="#dashboard">Dashboard</a>
           <a href="#feedback">Member Feedback</a>
           <a href="#reports">Reports</a>
@@ -426,111 +388,86 @@ export default function DashboardPage() {
         </nav>
       </header>
 
-      <div className="dashboard-container">
-        {/* ================= DASHBOARD ================= */}
-
-        <section id="dashboard" className="dashboard-section">
+      <div className="page-container">
+        <section id="dashboard">
           <div className="section-heading">
             <div>
-              <span className="section-label">
-                OPERATIONS
-              </span>
-
+              <span className="section-label">OPERATIONS</span>
               <h2>Service Request Overview</h2>
+            </div>
 
-              <p>
-                Monitor workload, resolution performance
-                and service turnaround.
-              </p>
+            <div className="prototype-status">
+              Prototype Dashboard
             </div>
           </div>
-
-          {/* ================= FILTERS ================= */}
 
           <div className="filter-panel">
             <div className="filter-heading">
               <div>
                 <h3>Search & Filters</h3>
-
                 <p>
-                  Narrow the dashboard to the operational
-                  records you want to analyse.
+                  Find and analyse service requests using the
+                  available operational dimensions.
                 </p>
               </div>
 
-              <div className="filter-count">
-                Showing{" "}
-                <strong>{totalRequests}</strong> of{" "}
-                <strong>{requests.length}</strong> requests
-              </div>
+              <span>
+                Showing {filteredRequests.length} of {requests.length}
+              </span>
             </div>
 
             <div className="filter-grid">
-              <div className="filter-field search-field">
-                <label htmlFor="search">
-                  Search requests
-                </label>
+              <div className="search-wrapper">
+                <label>Search Requests</label>
 
-                <div className="search-wrapper">
-                  <span className="search-icon">
-                    🔎
-                  </span>
-
-                  <input
-                    id="search"
-                    type="text"
-                    value={searchTerm}
-                    onChange={(event) => {
-                      setSearchTerm(event.target.value);
-                      setCurrentPage(1);
-                    }}
-                    placeholder="Request ID, branch, request type..."
-                  />
-                </div>
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={(event) => {
+                    setSearchTerm(event.target.value);
+                    setCurrentPage(1);
+                  }}
+                  placeholder="Request ID, branch, request type..."
+                />
               </div>
 
               <FilterSelect
                 label="Status"
                 value={statusFilter}
                 options={STATUS_OPTIONS}
-                onChange={(value) => {
-                  setStatusFilter(value);
-                  setCurrentPage(1);
-                }}
+                onChange={(value) =>
+                  handleFilterChange(setStatusFilter, value)
+                }
               />
 
               <FilterSelect
                 label="Branch"
                 value={branchFilter}
                 options={BRANCH_OPTIONS}
-                onChange={(value) => {
-                  setBranchFilter(value);
-                  setCurrentPage(1);
-                }}
+                onChange={(value) =>
+                  handleFilterChange(setBranchFilter, value)
+                }
               />
 
               <FilterSelect
                 label="Request Type"
                 value={requestTypeFilter}
-                options={requestTypes}
-                onChange={(value) => {
-                  setRequestTypeFilter(value);
-                  setCurrentPage(1);
-                }}
+                options={requestTypeOptions}
+                onChange={(value) =>
+                  handleFilterChange(setRequestTypeFilter, value)
+                }
               />
 
               <FilterSelect
                 label="Priority"
                 value={priorityFilter}
                 options={PRIORITY_OPTIONS}
-                onChange={(value) => {
-                  setPriorityFilter(value);
-                  setCurrentPage(1);
-                }}
+                onChange={(value) =>
+                  handleFilterChange(setPriorityFilter, value)
+                }
               />
 
               <button
-                type="button"
                 className="reset-button"
                 onClick={resetFilters}
               >
@@ -539,167 +476,220 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* ================= KPI CARDS ================= */}
-
           <div className="kpi-grid">
             <KpiCard
-              title="Total Requests"
+              label="Total Requests"
               value={totalRequests}
               description="Current filtered workload"
-              icon="◉"
+              accent="blue"
             />
 
             <KpiCard
-              title="Resolved"
+              label="Resolved"
               value={resolvedRequests.length}
               description={`${resolutionRate.toFixed(
                 1
               )}% resolution rate`}
-              icon="✓"
-              accent="teal"
+              accent="blue"
             />
 
             <KpiCard
-              title="Pending"
+              label="Pending"
               value={pendingRequests.length}
-              description="Requests requiring follow-up"
-              icon="!"
-              accent="orange"
+              description="Requests awaiting resolution"
+              accent="pink"
             />
 
             <KpiCard
-              title="Avg. Turnaround"
-              value={`${averageTurnaround.toFixed(
-                1
-              )} days`}
+              label="Avg. Turnaround"
+              value={`${averageTurnaround.toFixed(1)} days`}
               description="Resolved requests only"
-              icon="◷"
-              accent="slate"
+              accent="dark"
             />
           </div>
 
-          {/* ================= CHARTS ================= */}
-
           <div className="chart-grid">
-            <div className="dashboard-card">
-              <div className="card-heading">
+            <section className="card">
+              <div className="card-header">
                 <div>
                   <h3>Request Status Distribution</h3>
-
-                  <p>
-                    Current composition of the filtered
-                    workload.
-                  </p>
+                  <p>Current status across filtered requests.</p>
                 </div>
+
+                <strong>{totalRequests} Requests</strong>
+              </div>
+
+              <div className="chart-and-metrics">
+                <div className="chart-container pie-chart">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={statusData}
+                        dataKey="value"
+                        nameKey="name"
+                        cx="50%"
+                        cy="50%"
+                        outerRadius={90}
+                        innerRadius={48}
+                        paddingAngle={3}
+                      >
+                        {statusData.map((entry) => (
+                          <Cell
+                            key={entry.name}
+                            fill={
+                              STATUS_COLORS[
+                                entry.name as Status
+                              ]
+                            }
+                          />
+                        ))}
+                      </Pie>
+
+                      <Tooltip />
+                      <Legend />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+
+                <div className="metric-stack">
+                  <MiniMetric
+                    label="Resolved"
+                    value={resolvedRequests.length}
+                    accent="blue"
+                  />
+
+                  <MiniMetric
+                    label="Pending"
+                    value={pendingRequests.length}
+                    accent="pink"
+                  />
+
+                  <MiniMetric
+                    label="In Progress"
+                    value={inProgressRequests.length}
+                    accent="dark"
+                  />
+                </div>
+              </div>
+            </section>
+
+            <section className="card">
+              <div className="card-header">
+                <div>
+                  <h3>Branch Performance</h3>
+                  <p>Resolution rate by branch.</p>
+                </div>
+
+                <strong>Resolution %</strong>
               </div>
 
               <div className="chart-container">
-                <ResponsiveContainer
-                  width="100%"
-                  height="100%"
-                >
-                  <PieChart>
-                    <Pie
-                      data={statusData}
-                      dataKey="value"
-                      nameKey="name"
-                      cx="50%"
-                      cy="45%"
-                      innerRadius={65}
-                      outerRadius={100}
-                      paddingAngle={3}
-                    >
-                      {statusData.map((entry) => (
-                        <Cell
-                          key={entry.name}
-                          fill={
-                            STATUS_COLORS[
-                              entry.name as Status
-                            ]
-                          }
-                        />
-                      ))}
-                    </Pie>
-
-                    <Tooltip
-                      formatter={(value) => [
-                        value,
-                        "Requests",
-                      ]}
-                    />
-
-                    <Legend
-                      verticalAlign="bottom"
-                      height={36}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
-
-                <div className="chart-center-label">
-                  <strong>{totalRequests}</strong>
-                  <span>Requests</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="dashboard-card">
-              <div className="card-heading">
-                <div>
-                  <h3>Branch Performance</h3>
-
-                  <p>
-                    Resolution rate by branch.
-                  </p>
-                </div>
-              </div>
-
-              <div className="chart-container branch-chart">
-                <ResponsiveContainer
-                  width="100%"
-                  height="100%"
-                >
+                <ResponsiveContainer width="100%" height="100%">
                   <BarChart
                     data={branchPerformance}
                     margin={{
                       top: 10,
                       right: 10,
-                      left: -15,
+                      left: -10,
                       bottom: 5,
                     }}
                   >
-                    <CartesianGrid
-                      strokeDasharray="3 3"
-                      vertical={false}
-                    />
-
-                    <XAxis
-                      dataKey="branch"
-                      tick={{
-                        fontSize: 12,
-                      }}
-                    />
-
-                    <YAxis
-                      domain={[0, 100]}
-                      tick={{
-                        fontSize: 12,
-                      }}
-                      tickFormatter={(value) =>
-                        `${value}%`
-                      }
-                    />
-
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="branch" />
+                    <YAxis domain={[0, 100]} />
                     <Tooltip
                       formatter={(value) => [
                         `${value}%`,
                         "Resolution Rate",
                       ]}
                     />
-
                     <Bar
                       dataKey="resolutionRate"
-                      name="Resolution Rate"
-                      fill="#008C95"
+                      fill="#42A4C1"
+                      radius={[6, 6, 0, 0]}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+
+              <div className="branch-summary-table">
+                {branchPerformance.map((branch) => (
+                  <div
+                    className="branch-summary-row"
+                    key={branch.branch}
+                  >
+                    <span>{branch.branch}</span>
+                    <span>{branch.requests} requests</span>
+                    <strong>
+                      {branch.resolutionRate.toFixed(1)}%
+                    </strong>
+                  </div>
+                ))}
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section id="feedback" className="content-section">
+          <div className="section-heading">
+            <div>
+              <span className="section-label">SERVICE QUALITY</span>
+              <h2>Member Satisfaction</h2>
+            </div>
+
+            <div className="prototype-badge">
+              PROTOTYPE DATA
+            </div>
+          </div>
+
+          <div className="card notice-card">
+            <p>
+              The current dummy service-request dataset does not
+              contain member feedback ratings. This section
+              demonstrates the intended production dashboard
+              structure using prototype data.
+            </p>
+          </div>
+
+          <div className="feedback-grid">
+            <div className="feedback-metrics">
+              <MiniMetric
+                label="Average Rating"
+                value={`${averageSatisfaction.toFixed(1)} / 5`}
+                accent="blue"
+              />
+
+              <MiniMetric
+                label="Feedback Responses"
+                value={feedbackData.length}
+                accent="dark"
+              />
+
+              <MiniMetric
+                label="Positive Feedback"
+                value={`${positiveFeedback.toFixed(1)}%`}
+                accent="pink"
+              />
+            </div>
+
+            <div className="card">
+              <div className="card-header">
+                <div>
+                  <h3>Feedback Rating Distribution</h3>
+                  <p>Prototype member satisfaction ratings.</p>
+                </div>
+              </div>
+
+              <div className="chart-container">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={ratingDistribution}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="rating" />
+                    <YAxis allowDecimals={false} />
+                    <Tooltip />
+                    <Bar
+                      dataKey="responses"
+                      fill="#EC006A"
                       radius={[6, 6, 0, 0]}
                     />
                   </BarChart>
@@ -707,240 +697,105 @@ export default function DashboardPage() {
               </div>
             </div>
           </div>
-        </section>
 
-        {/* ================= FEEDBACK ================= */}
-
-        <section
-          id="feedback"
-          className="dashboard-section"
-        >
-          <div className="section-heading">
-            <div>
-              <span className="section-label">
-                SERVICE QUALITY
-              </span>
-
-              <h2>Member Satisfaction & Feedback</h2>
-
-              <p>
-                Prototype analysis of member feedback and
-                satisfaction.
-              </p>
-            </div>
-
-            <span className="prototype-badge">
-              PROTOTYPE DATA
-            </span>
-          </div>
-
-          <div className="prototype-notice">
-            <strong>Prototype / dummy feedback analysis.</strong>
-
-            <span>
-              {" "}
-              Real production feedback would come from the
-              approved member-service source.
-            </span>
-          </div>
-
-          <div className="small-kpi-grid">
-            <MiniMetric
-              title="Average Rating"
-              value={`${averageSatisfaction.toFixed(
-                1
-              )} / 5`}
-              description="Prototype feedback sample"
-            />
-
-            <MiniMetric
-              title="Feedback Responses"
-              value={filteredFeedback.length}
-              description="Prototype responses"
-            />
-
-            <MiniMetric
-              title="Positive Feedback"
-              value={`${positiveFeedback.toFixed(
-                1
-              )}%`}
-              description="Ratings of 4 or 5"
-            />
-          </div>
-
-          <div className="dashboard-card">
-            <div className="card-heading">
-              <div>
-                <h3>Feedback Rating Distribution</h3>
-
-                <p>
-                  Distribution of prototype satisfaction
-                  ratings.
-                </p>
-              </div>
-            </div>
-
-            <div className="chart-container feedback-chart">
-              <ResponsiveContainer
-                width="100%"
-                height="100%"
-              >
-                <BarChart
-                  data={feedbackRatingData}
-                  margin={{
-                    top: 10,
-                    right: 15,
-                    left: -15,
-                    bottom: 5,
-                  }}
-                >
-                  <CartesianGrid
-                    strokeDasharray="3 3"
-                    vertical={false}
-                  />
-
-                  <XAxis
-                    dataKey="rating"
-                    tick={{
-                      fontSize: 12,
-                    }}
-                  />
-
-                  <YAxis
-                    allowDecimals={false}
-                    tick={{
-                      fontSize: 12,
-                    }}
-                  />
-
-                  <Tooltip />
-
-                  <Bar
-                    dataKey="responses"
-                    name="Responses"
-                    fill="#008C95"
-                    radius={[6, 6, 0, 0]}
-                  />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-        </section>
-
-        {/* ================= CONTACT CHANNELS ================= */}
-
-        <section className="dashboard-section">
-          <div className="section-heading">
+          <div className="section-heading channel-heading">
             <div>
               <span className="section-label">
                 MEMBER BEHAVIOUR
               </span>
-
               <h2>Member Contact Channels</h2>
-
-              <p>
-                Prototype analysis of how members may
-                contact the service team.
-              </p>
             </div>
 
-            <span className="prototype-badge">
+            <div className="prototype-badge">
               PROTOTYPE DATA
-            </span>
+            </div>
           </div>
 
-          <div className="dashboard-card channel-card">
-            <div className="channel-layout">
-              <div className="channel-chart">
-                <ResponsiveContainer
-                  width="100%"
-                  height="100%"
-                >
+          <div className="card notice-card">
+            <p>
+              This prototype demonstrates how service requests
+              could be analysed by contact channel. Production
+              implementation would use approved member-service
+              channel data.
+            </p>
+          </div>
+
+          <div className="channel-grid">
+            <div className="card">
+              <div className="card-header">
+                <div>
+                  <h3>Contact Channel Distribution</h3>
+                  <p>Email, chatbot, phone and branch interactions.</p>
+                </div>
+              </div>
+
+              <div className="chart-container">
+                <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
                       data={channelData}
                       dataKey="value"
                       nameKey="name"
                       cx="50%"
-                      cy="45%"
-                      innerRadius={65}
-                      outerRadius={100}
-                      paddingAngle={3}
+                      cy="50%"
+                      outerRadius={90}
                     >
-                      {channelData.map(
-                        (entry, index) => (
-                          <Cell
-                            key={entry.name}
-                            fill={
-                              CHANNEL_COLORS[
-                                index %
-                                  CHANNEL_COLORS.length
-                              ]
-                            }
-                          />
-                        )
-                      )}
+                      {channelData.map((entry, index) => (
+                        <Cell
+                          key={entry.name}
+                          fill={CHANNEL_COLORS[index]}
+                        />
+                      ))}
                     </Pie>
 
-                    <Tooltip
-                      formatter={(value) => [
-                        value,
-                        "Requests",
-                      ]}
-                    />
-
-                    <Legend
-                      verticalAlign="bottom"
-                      height={36}
-                    />
+                    <Tooltip />
+                    <Legend />
                   </PieChart>
                 </ResponsiveContainer>
               </div>
+            </div>
 
-              <div className="channel-summary">
-                <span className="summary-label">
-                  Leading prototype channel
-                </span>
+            <div className="channel-metrics">
+              {channelData.map((channel) => {
+                const percentage =
+                  filteredRequests.length > 0
+                    ? (channel.value / filteredRequests.length) * 100
+                    : 0;
 
-                <strong>
-                  {topChannel?.name || "N/A"}
-                </strong>
+                return (
+                  <div
+                    className="channel-card"
+                    key={channel.name}
+                  >
+                    <span>{channel.name}</span>
+                    <strong>{channel.value}</strong>
+                    <small>{percentage.toFixed(1)}%</small>
+                  </div>
+                );
+              })}
 
-                <span className="channel-value">
-                  {topChannel?.value || 0} requests
-                </span>
-
-                <p>
-                  In a production dashboard, this analysis
-                  would help management understand member
-                  behaviour and identify opportunities to
-                  improve digital channels such as the
-                  chatbot.
-                </p>
-              </div>
+              {topChannel && (
+                <div className="leading-channel">
+                  <span>Leading Channel</span>
+                  <strong>{topChannel.name}</strong>
+                  <small>
+                    {topChannel.value} requests in current view
+                  </small>
+                </div>
+              )}
             </div>
           </div>
         </section>
 
-        {/* ================= TABLE ================= */}
-
-        <section className="dashboard-section">
+        <section className="content-section">
           <div className="section-heading">
             <div>
-              <span className="section-label">
-                OPERATIONAL RECORDS
-              </span>
-
+              <span className="section-label">OPERATIONS</span>
               <h2>Service Request Details</h2>
-
-              <p>
-                Detailed records behind the dashboard
-                summaries.
-              </p>
             </div>
           </div>
 
-          <div className="dashboard-card table-card">
+          <div className="card table-card">
             <div className="table-wrapper">
               <table>
                 <thead>
@@ -955,45 +810,39 @@ export default function DashboardPage() {
                 </thead>
 
                 <tbody>
-                  {displayedRequests.length > 0 ? (
-                    displayedRequests.map((request) => (
-                      <tr key={request.request_id}>
-                        <td className="request-id">
-                          {request.request_id}
-                        </td>
+                  {displayedRequests.map((request) => (
+                    <tr key={request.request_id}>
+                      <td className="request-id">
+                        {request.request_id}
+                      </td>
 
-                        <td>{request.branch}</td>
+                      <td>{request.branch}</td>
 
-                        <td>{request.request_type}</td>
+                      <td>{request.request_type}</td>
 
-                        <td>
-                          <PriorityBadge
-                            priority={request.priority}
-                          />
-                        </td>
+                      <td>
+                        <PriorityBadge
+                          priority={request.priority}
+                        />
+                      </td>
 
-                        <td>
-                          <StatusBadge
-                            status={request.status}
-                          />
-                        </td>
+                      <td>
+                        <StatusBadge status={request.status} />
+                      </td>
 
-                        <td>
-                          {request.status ===
-                          "Resolved"
-                            ? `${request.turnaround_days} days`
-                            : "—"}
-                        </td>
-                      </tr>
-                    ))
-                  ) : (
+                      <td>
+                        {request.status === "Resolved"
+                          ? `${request.turnaround_days} days`
+                          : "—"}
+                      </td>
+                    </tr>
+                  ))}
+
+                  {displayedRequests.length === 0 && (
                     <tr>
-                      <td
-                        colSpan={6}
-                        className="no-results"
-                      >
-                        No service requests match the
-                        selected filters.
+                      <td colSpan={6} className="empty-state">
+                        No service requests match the selected
+                        filters.
                       </td>
                     </tr>
                   )}
@@ -1001,264 +850,202 @@ export default function DashboardPage() {
               </table>
             </div>
 
-            <div className="table-footer">
+            <div className="pagination">
               <span>
                 Showing{" "}
-                {totalRequests === 0
+                {filteredRequests.length === 0
                   ? 0
                   : startIndex + 1}{" "}
                 –{" "}
                 {Math.min(
                   startIndex + PAGE_SIZE,
-                  totalRequests
+                  filteredRequests.length
                 )}{" "}
-                of {totalRequests} requests
+                of {filteredRequests.length}
               </span>
 
-              <div className="pagination">
+              <div className="pagination-controls">
                 <button
-                  type="button"
                   disabled={safeCurrentPage === 1}
                   onClick={() =>
-                    setCurrentPage(
-                      Math.max(1, safeCurrentPage - 1)
-                    )
+                    setCurrentPage((page) => Math.max(1, page - 1))
                   }
                 >
-                  ← Previous
+                  Previous
                 </button>
 
                 {Array.from(
                   { length: totalPages },
                   (_, index) => index + 1
                 )
-                  .slice(0, 10)
+                  .slice(
+                    Math.max(0, safeCurrentPage - 3),
+                    Math.min(totalPages, safeCurrentPage + 2)
+                  )
                   .map((page) => (
                     <button
-                      type="button"
                       key={page}
                       className={
                         page === safeCurrentPage
                           ? "active-page"
                           : ""
                       }
-                      onClick={() =>
-                        setCurrentPage(page)
-                      }
+                      onClick={() => setCurrentPage(page)}
                     >
                       {page}
                     </button>
                   ))}
 
                 <button
-                  type="button"
-                  disabled={
-                    safeCurrentPage === totalPages
-                  }
+                  disabled={safeCurrentPage === totalPages}
                   onClick={() =>
-                    setCurrentPage(
-                      Math.min(
-                        totalPages,
-                        safeCurrentPage + 1
-                      )
+                    setCurrentPage((page) =>
+                      Math.min(totalPages, page + 1)
                     )
                   }
                 >
-                  Next →
+                  Next
                 </button>
               </div>
             </div>
 
             <div className="table-note">
-              The table displays 10 records per page where
-              available. KPI calculations use the complete
-              filtered dataset.
+              The table displays 10 records per page to keep the
+              operational view manageable. KPI calculations use
+              the complete filtered dataset.
             </div>
           </div>
         </section>
 
-        {/* ================= REPORTS ================= */}
-
-        <section
-          id="reports"
-          className="dashboard-section"
-        >
+        <section id="reports" className="content-section">
           <div className="section-heading">
             <div>
-              <span className="section-label">
-                REPORTING
-              </span>
-
+              <span className="section-label">REPORTING</span>
               <h2>Reports & Export</h2>
-
-              <p>
-                Export the currently filtered service-request
-                records for further analysis or reporting.
-              </p>
             </div>
           </div>
 
           <div className="report-grid">
-            <div className="dashboard-card report-card">
-              <div className="report-icon">▣</div>
+            <div className="card report-card">
+              <span className="report-label">CURRENT REPORT</span>
+              <h3>Operational Service Request Report</h3>
 
-              <div>
-                <h3>Current Report</h3>
+              <p>
+                Export the current filtered operational view for
+                further analysis, reporting or management review.
+              </p>
 
-                <p>
-                  {totalRequests} requests currently match
-                  the selected filters and search criteria.
-                </p>
-
-                <button
-                  type="button"
-                  className="primary-button"
-                  onClick={exportCSV}
-                >
-                  Export Filtered Data CSV
-                </button>
-              </div>
+              <button
+                className="primary-button"
+                onClick={exportCSV}
+              >
+                Export Filtered Data CSV
+              </button>
             </div>
 
-            <div className="dashboard-card report-summary">
-              <div className="report-summary-header">
-                <div>
-                  <h3>Operational Summary</h3>
+            <div className="card summary-card">
+              <span className="report-label">
+                OPERATIONAL SUMMARY
+              </span>
 
-                  <p>
-                    Snapshot of the current filtered
-                    workload.
-                  </p>
-                </div>
+              <div className="summary-row">
+                <span>Total Requests</span>
+                <strong>{totalRequests}</strong>
               </div>
 
-              <div className="summary-grid">
-                <div>
-                  <span>Total workload</span>
-                  <strong>{totalRequests}</strong>
-                </div>
+              <div className="summary-row">
+                <span>Resolved</span>
+                <strong>{resolvedRequests.length}</strong>
+              </div>
 
-                <div>
-                  <span>Resolved</span>
-                  <strong>
-                    {resolvedRequests.length}
-                  </strong>
-                </div>
+              <div className="summary-row">
+                <span>Pending</span>
+                <strong>{pendingRequests.length}</strong>
+              </div>
 
-                <div>
-                  <span>Pending</span>
-                  <strong>
-                    {pendingRequests.length}
-                  </strong>
-                </div>
+              <div className="summary-row">
+                <span>Resolution Rate</span>
+                <strong>{resolutionRate.toFixed(1)}%</strong>
+              </div>
 
-                <div>
-                  <span>Resolution rate</span>
-                  <strong>
-                    {resolutionRate.toFixed(1)}%
-                  </strong>
-                </div>
-
-                <div>
-                  <span>Avg. turnaround</span>
-                  <strong>
-                    {averageTurnaround.toFixed(1)} days
-                  </strong>
-                </div>
+              <div className="summary-row">
+                <span>Avg. Turnaround</span>
+                <strong>
+                  {averageTurnaround.toFixed(1)} days
+                </strong>
               </div>
             </div>
           </div>
         </section>
 
-        {/* ================= AI ================= */}
+        <section id="ai-insights" className="content-section">
+          <div className="section-heading">
+            <div>
+              <span className="section-label">
+                FUTURE CAPABILITY
+              </span>
+              <h2>AI Insights</h2>
+            </div>
 
-        <section
-          id="ai-insights"
-          className="dashboard-section"
-        >
+            <div className="coming-badge">COMING NEXT</div>
+          </div>
+
           <div className="ai-card">
             <div className="ai-header">
-              <div className="ai-icon">✦</div>
-
               <div>
-                <span className="section-label">
-                  FUTURE CAPABILITY
-                </span>
+                <span className="ai-label">AI INTEGRATION SPACE</span>
+                <h3>Intelligent Service Operations</h3>
+              </div>
 
-                <h2>AI Insights</h2>
+              <span className="ai-status">PLANNED</span>
+            </div>
 
+            <p>
+              This area is reserved for future AI capabilities.
+              The current prototype does not present fabricated AI
+              recommendations or analysis as real results.
+            </p>
+
+            <div className="ai-capabilities">
+              <div className="ai-capability">
+                <span>01</span>
+                <h4>Theme Detection</h4>
                 <p>
-                  Reserved space for future AI-powered
-                  service request analysis.
+                  Identify recurring themes and patterns in member
+                  service requests.
                 </p>
               </div>
 
-              <span className="coming-badge">
-                COMING NEXT
-              </span>
-            </div>
-
-            <div className="ai-content">
-              <h3>Planned AI capability</h3>
-
-              <p>
-                A future version could use AI to identify
-                recurring request themes, summarise member
-                feedback, highlight unusual workload
-                patterns and suggest areas requiring
-                management attention.
-              </p>
-
-              <div className="ai-capability-grid">
-                <div>
-                  <span>01</span>
-                  <strong>Theme Detection</strong>
-                  <p>
-                    Identify recurring member-service
-                    request themes.
-                  </p>
-                </div>
-
-                <div>
-                  <span>02</span>
-                  <strong>Feedback Summary</strong>
-                  <p>
-                    Summarise large volumes of member
-                    feedback.
-                  </p>
-                </div>
-
-                <div>
-                  <span>03</span>
-                  <strong>Workload Alerts</strong>
-                  <p>
-                    Highlight unusual changes in workload
-                    patterns.
-                  </p>
-                </div>
-
-                <div>
-                  <span>04</span>
-                  <strong>Management Attention</strong>
-                  <p>
-                    Surface areas that may require
-                    management review.
-                  </p>
-                </div>
+              <div className="ai-capability">
+                <span>02</span>
+                <h4>Feedback Summary</h4>
+                <p>
+                  Summarise member feedback and identify service
+                  quality trends.
+                </p>
               </div>
-            </div>
 
-            <div className="ai-footer">
-              <strong>Important:</strong> AI outputs are
-              not being presented as real in this prototype.
-              Production AI would require approved data,
-              governance and validation.
+              <div className="ai-capability">
+                <span>03</span>
+                <h4>Workload Alerts</h4>
+                <p>
+                  Detect unusual request volumes and operational
+                  workload patterns.
+                </p>
+              </div>
+
+              <div className="ai-capability">
+                <span>04</span>
+                <h4>Management Attention</h4>
+                <p>
+                  Highlight areas that may require management
+                  review or intervention.
+                </p>
+              </div>
             </div>
           </div>
         </section>
       </div>
-
-      {/* ================= FOOTER ================= */}
 
       <footer className="dashboard-footer">
         <div>
@@ -1267,15 +1054,14 @@ export default function DashboardPage() {
         </div>
 
         <p>
-          Prototype dashboard using dummy CPF-style
-          service-request data.
+          Prototype dashboard using dummy CPF-style service
+          request data. Satisfaction and contact-channel sections
+          are prototype examples.
         </p>
       </footer>
     </main>
   );
 }
-
-/* ================= COMPONENTS ================= */
 
 function FilterSelect({
   label,
@@ -1294,9 +1080,7 @@ function FilterSelect({
 
       <select
         value={value}
-        onChange={(event) =>
-          onChange(event.target.value)
-        }
+        onChange={(event) => onChange(event.target.value)}
       >
         {options.map((option) => (
           <option key={option} value={option}>
@@ -1309,86 +1093,55 @@ function FilterSelect({
 }
 
 function KpiCard({
-  title,
+  label,
   value,
   description,
-  icon,
-  accent = "teal",
+  accent,
 }: {
-  title: string;
+  label: string;
   value: string | number;
   description: string;
-  icon: string;
-  accent?: "teal" | "orange" | "slate";
+  accent: "blue" | "pink" | "dark";
 }) {
   return (
     <div className={`kpi-card ${accent}`}>
-      <div className="kpi-top">
-        <span>{title}</span>
-
-        <div className="kpi-icon">{icon}</div>
-      </div>
-
+      <span>{label}</span>
       <strong>{value}</strong>
-
-      <p>{description}</p>
+      <small>{description}</small>
     </div>
   );
 }
 
 function MiniMetric({
-  title,
+  label,
   value,
-  description,
+  accent,
 }: {
-  title: string;
+  label: string;
   value: string | number;
-  description: string;
+  accent: "blue" | "pink" | "dark";
 }) {
   return (
-    <div className="mini-metric">
-      <span>{title}</span>
-
+    <div className={`mini-metric ${accent}`}>
+      <span>{label}</span>
       <strong>{value}</strong>
-
-      <p>{description}</p>
     </div>
   );
 }
 
-function StatusBadge({
-  status,
-}: {
-  status: Status;
-}) {
-  const className =
-    status === "Resolved"
-      ? "status-resolved"
-      : status === "Pending"
-      ? "status-pending"
-      : "status-progress";
-
+function StatusBadge({ status }: { status: Status }) {
   return (
-    <span className={`status-badge ${className}`}>
+    <span className={`status-badge ${status.toLowerCase().replace(" ", "-")}`}>
       {status}
     </span>
   );
 }
 
-function PriorityBadge({
-  priority,
-}: {
-  priority: Priority;
-}) {
-  const className =
-    priority === "Urgent"
-      ? "priority-urgent"
-      : priority === "High"
-      ? "priority-high"
-      : "priority-normal";
-
+function PriorityBadge({ priority }: { priority: Priority }) {
   return (
-    <span className={`priority-badge ${className}`}>
+    <span
+      className={`priority-badge ${priority.toLowerCase()}`}
+    >
       {priority}
     </span>
   );
