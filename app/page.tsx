@@ -60,14 +60,6 @@ const STATUS_COLORS = {
   "In Progress": "#64748B",
 };
 
-const SATISFACTION_COLORS = [
-  "#008C95",
-  "#2CA6A4",
-  "#F5A623",
-  "#94A3B8",
-  "#CBD5E1",
-];
-
 const CHANNEL_COLORS = [
   "#008C95",
   "#F5A623",
@@ -78,28 +70,31 @@ const CHANNEL_COLORS = [
 const requests = requestData as ServiceRequest[];
 
 /*
-  BUSINESS NOTE:
-  The original prototype dataset does not contain customer feedback
-  or contact-channel fields.
-
-  Therefore these values are clearly labelled as PROTOTYPE / DUMMY DATA.
-  They are generated consistently from the request index so that the
-  dashboard can demonstrate the intended analysis without pretending
-  that these are real member measurements.
+  Prototype feedback data.
+  The original dummy service-request dataset does not contain
+  actual member satisfaction ratings.
 */
-
 const prototypeFeedbackData = requests.map((request, index) => {
   const ratings = [5, 4, 4, 5, 3, 4, 5, 4, 3, 5];
-  const rating = ratings[index % ratings.length];
 
   return {
     ...request,
-    feedback_rating: rating,
+    feedback_rating: ratings[index % ratings.length],
   };
 });
 
+/*
+  Prototype contact-channel data.
+  Production data should come from the approved member-service source.
+*/
 const prototypeChannelData = requests.map((request, index) => {
-  const channels = ["Email", "Email", "Chatbot", "Phone", "Branch"];
+  const channels = [
+    "Email",
+    "Email",
+    "Chatbot",
+    "Phone",
+    "Branch",
+  ];
 
   return {
     ...request,
@@ -112,11 +107,8 @@ export default function DashboardPage() {
   const [branchFilter, setBranchFilter] = useState("All");
   const [requestTypeFilter, setRequestTypeFilter] = useState("All");
   const [priorityFilter, setPriorityFilter] = useState("All");
-
   const [searchTerm, setSearchTerm] = useState("");
-
   const [currentPage, setCurrentPage] = useState(1);
-
   const [darkMode, setDarkMode] = useState(false);
 
   const requestTypes = useMemo(() => {
@@ -127,11 +119,6 @@ export default function DashboardPage() {
       ),
     ];
   }, []);
-
-  /*
-    FILTERED REQUESTS
-    This is the main dataset used by the dashboard.
-  */
 
   const filteredRequests = useMemo(() => {
     const search = searchTerm.trim().toLowerCase();
@@ -178,9 +165,9 @@ export default function DashboardPage() {
   ]);
 
   /*
-    KPI CALCULATIONS
+    KPI calculations use the complete filtered dataset,
+    not only the 10 records currently visible in the table.
   */
-
   const totalRequests = filteredRequests.length;
 
   const resolvedRequests = filteredRequests.filter(
@@ -208,37 +195,6 @@ export default function DashboardPage() {
         ) / resolvedRequests.length
       : 0;
 
-  /*
-    PAGINATION
-  */
-
-  const totalPages = Math.max(
-    1,
-    Math.ceil(totalRequests / PAGE_SIZE)
-  );
-
-  const safeCurrentPage = Math.min(
-    currentPage,
-    totalPages
-  );
-
-  const startIndex =
-    (safeCurrentPage - 1) * PAGE_SIZE;
-
-  const endIndex = Math.min(
-    startIndex + PAGE_SIZE,
-    totalRequests
-  );
-
-  const displayedRequests = filteredRequests.slice(
-    startIndex,
-    endIndex
-  );
-
-  /*
-    STATUS CHART
-  */
-
   const statusData = [
     {
       name: "Resolved",
@@ -254,75 +210,54 @@ export default function DashboardPage() {
     },
   ];
 
-  /*
-    BRANCH PERFORMANCE
-  */
-
-  const branchData = useMemo(() => {
-    const branches = Array.from(
-      new Set(filteredRequests.map((request) => request.branch))
+  const branchPerformance = BRANCH_OPTIONS.filter(
+    (branch) => branch !== "All"
+  ).map((branch) => {
+    const branchRequests = filteredRequests.filter(
+      (request) => request.branch === branch
     );
 
-    return branches.map((branch) => {
-      const branchRequests = filteredRequests.filter(
-        (request) => request.branch === branch
-      );
-
-      const branchResolved = branchRequests.filter(
-        (request) => request.status === "Resolved"
-      );
-
-      const branchResolutionRate =
-        branchRequests.length > 0
-          ? (branchResolved.length / branchRequests.length) * 100
-          : 0;
-
-      const branchAverageTurnaround =
-        branchResolved.length > 0
-          ? branchResolved.reduce(
-              (sum, request) =>
-                sum + request.turnaround_days,
-              0
-            ) / branchResolved.length
-          : 0;
-
-      return {
-        branch,
-        requests: branchRequests.length,
-        resolved: branchResolved.length,
-        resolutionRate: Number(
-          branchResolutionRate.toFixed(1)
-        ),
-        turnaround: Number(
-          branchAverageTurnaround.toFixed(1)
-        ),
-      };
-    });
-  }, [filteredRequests]);
-
-  /*
-    CUSTOMER SATISFACTION
-    PROTOTYPE / DUMMY DATA ONLY
-  */
-
-  const filteredFeedback = useMemo(() => {
-    const filteredIds = new Set(
-      filteredRequests.map((request) => request.request_id)
+    const branchResolved = branchRequests.filter(
+      (request) => request.status === "Resolved"
     );
 
-    return prototypeFeedbackData.filter((request) =>
-      filteredIds.has(request.request_id)
-    );
-  }, [filteredRequests]);
+    const branchResolutionRate =
+      branchRequests.length > 0
+        ? (branchResolved.length / branchRequests.length) * 100
+        : 0;
 
-  const satisfactionDistribution = useMemo(() => {
-    return [1, 2, 3, 4, 5].map((rating) => ({
-      rating: `${rating} Star`,
-      count: filteredFeedback.filter(
-        (item) => item.feedback_rating === rating
-      ).length,
-    }));
-  }, [filteredFeedback]);
+    const branchAverageTurnaround =
+      branchResolved.length > 0
+        ? branchResolved.reduce(
+            (sum, request) => sum + request.turnaround_days,
+            0
+          ) / branchResolved.length
+        : 0;
+
+    return {
+      branch,
+      requests: branchRequests.length,
+      resolutionRate: Number(branchResolutionRate.toFixed(1)),
+      averageTurnaround: Number(
+        branchAverageTurnaround.toFixed(1)
+      ),
+    };
+  });
+
+  const filteredRequestIds = new Set(
+    filteredRequests.map((request) => request.request_id)
+  );
+
+  const filteredFeedback = prototypeFeedbackData.filter(
+    (item) => filteredRequestIds.has(item.request_id)
+  );
+
+  const feedbackRatingData = [1, 2, 3, 4, 5].map((rating) => ({
+    rating: `${rating} Star`,
+    responses: filteredFeedback.filter(
+      (item) => item.feedback_rating === rating
+    ).length,
+  }));
 
   const averageSatisfaction =
     filteredFeedback.length > 0
@@ -332,7 +267,7 @@ export default function DashboardPage() {
         ) / filteredFeedback.length
       : 0;
 
-  const positiveFeedbackPercentage =
+  const positiveFeedback =
     filteredFeedback.length > 0
       ? (filteredFeedback.filter(
           (item) => item.feedback_rating >= 4
@@ -341,45 +276,51 @@ export default function DashboardPage() {
         100
       : 0;
 
-  /*
-    CONTACT CHANNEL ANALYSIS
-    PROTOTYPE / DUMMY DATA ONLY
-  */
+  const filteredChannels = prototypeChannelData.filter(
+    (item) => filteredRequestIds.has(item.request_id)
+  );
 
-  const filteredChannels = useMemo(() => {
-    const filteredIds = new Set(
-      filteredRequests.map((request) => request.request_id)
-    );
+  const channelNames = [
+    "Email",
+    "Chatbot",
+    "Phone",
+    "Branch",
+  ];
 
-    return prototypeChannelData.filter((request) =>
-      filteredIds.has(request.request_id)
-    );
-  }, [filteredRequests]);
-
-  const channelData = useMemo(() => {
-    const channels = [
-      "Email",
-      "Chatbot",
-      "Phone",
-      "Branch",
-    ];
-
-    return channels.map((channel) => ({
-      name: channel,
-      value: filteredChannels.filter(
-        (item) => item.contact_channel === channel
-      ).length,
-    }));
-  }, [filteredChannels]);
+  const channelData = channelNames.map((channel) => ({
+    name: channel,
+    value: filteredChannels.filter(
+      (item) => item.contact_channel === channel
+    ).length,
+  }));
 
   const topChannel =
-    [...channelData].sort(
-      (a, b) => b.value - a.value
-    )[0]?.name || "N/A";
+    channelData.length > 0
+      ? channelData.reduce((top, current) =>
+          current.value > top.value ? current : top
+        )
+      : null;
 
   /*
-    RESET FILTERS
+    Pagination
   */
+  const totalPages = Math.max(
+    1,
+    Math.ceil(totalRequests / PAGE_SIZE)
+  );
+
+  const safeCurrentPage = Math.min(
+    currentPage,
+    totalPages
+  );
+
+  const startIndex =
+    (safeCurrentPage - 1) * PAGE_SIZE;
+
+  const displayedRequests = filteredRequests.slice(
+    startIndex,
+    startIndex + PAGE_SIZE
+  );
 
   const resetFilters = () => {
     setStatusFilter("All");
@@ -389,39 +330,6 @@ export default function DashboardPage() {
     setSearchTerm("");
     setCurrentPage(1);
   };
-
-  /*
-    FILTER HELPERS
-  */
-
-  const updateStatus = (value: string) => {
-    setStatusFilter(value);
-    setCurrentPage(1);
-  };
-
-  const updateBranch = (value: string) => {
-    setBranchFilter(value);
-    setCurrentPage(1);
-  };
-
-  const updateRequestType = (value: string) => {
-    setRequestTypeFilter(value);
-    setCurrentPage(1);
-  };
-
-  const updatePriority = (value: string) => {
-    setPriorityFilter(value);
-    setCurrentPage(1);
-  };
-
-  const updateSearch = (value: string) => {
-    setSearchTerm(value);
-    setCurrentPage(1);
-  };
-
-  /*
-    CSV EXPORT
-  */
 
   const exportCSV = () => {
     const headers = [
@@ -443,15 +351,17 @@ export default function DashboardPage() {
     ]);
 
     const csvContent = [
-      headers.join(","),
-      ...rows.map((row) =>
+      headers,
+      ...rows,
+    ]
+      .map((row) =>
         row
           .map((value) =>
             `"${String(value).replace(/"/g, '""')}"`
           )
           .join(",")
-      ),
-    ].join("\n");
+      )
+      .join("\n");
 
     const blob = new Blob([csvContent], {
       type: "text/csv;charset=utf-8;",
@@ -460,379 +370,454 @@ export default function DashboardPage() {
     const url = URL.createObjectURL(blob);
 
     const link = document.createElement("a");
-
     link.href = url;
     link.download = "cpf-member-service-report.csv";
-
-    document.body.appendChild(link);
-
     link.click();
-
-    document.body.removeChild(link);
 
     URL.revokeObjectURL(url);
   };
 
-  /*
-    PAGE NAVIGATION
-  */
-
-  const goToPage = (page: number) => {
-    if (page >= 1 && page <= totalPages) {
-      setCurrentPage(page);
-    }
-  };
-
-  /*
-    THEME CLASSES
-  */
-
-  const pageBackground = darkMode
-    ? "bg-slate-950 text-slate-100"
-    : "bg-slate-100 text-slate-900";
-
-  const cardBackground = darkMode
-    ? "border-slate-800 bg-slate-900"
-    : "border-slate-200 bg-white";
-
-  const mutedText = darkMode
-    ? "text-slate-400"
-    : "text-slate-500";
-
-  const tableHeader = darkMode
-    ? "bg-slate-800 text-slate-300"
-    : "bg-slate-50 text-slate-600";
-
-  const tableRow = darkMode
-    ? "border-slate-800 hover:bg-slate-800/60"
-    : "border-slate-100 hover:bg-slate-50";
-
   return (
     <main
-      className={`min-h-screen transition-colors duration-300 ${pageBackground}`}
+      className={`dashboard-shell ${
+        darkMode ? "dark-mode" : ""
+      }`}
     >
-      {/* =========================================================
-          HEADER
-      ========================================================== */}
+      {/* ================= HEADER ================= */}
 
-      <header
-        className={`border-b ${
-          darkMode
-            ? "border-slate-800 bg-slate-950"
-            : "border-slate-200 bg-white"
-        }`}
-      >
-        <div className="mx-auto max-w-7xl px-4 py-5 sm:px-6 lg:px-8">
-          <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
-            <div className="flex items-start gap-4">
-              {/* CPF LOGO */}
-              <div className="shrink-0">
-                <img
-                  src="/cpf-logo.png"
-                  alt="CPF Financial Services"
-                  className="h-16 w-auto object-contain sm:h-20"
-                />
+      <header className="top-header">
+        <div className="header-inner">
+          <div className="brand-area">
+            <img
+              src="/cpf-logo.png"
+              alt="CPF Financial Services"
+              className="cpf-logo"
+            />
+
+            <div className="brand-copy">
+              <div className="organization-name">
+                CPF FINANCIAL SERVICES
               </div>
 
-              {/* HEADER TEXT */}
+              <h1>Member Service Request Dashboard</h1>
+
+              <p>
+                Operational view of member service requests,
+                resolution status and turnaround performance.
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            className="theme-toggle"
+            onClick={() => setDarkMode(!darkMode)}
+            aria-label="Toggle dark mode"
+          >
+            {darkMode ? "☀ Light Mode" : "☾ Dark Mode"}
+          </button>
+        </div>
+
+        <nav className="main-navigation">
+          <a href="#dashboard">Dashboard</a>
+          <a href="#feedback">Member Feedback</a>
+          <a href="#reports">Reports</a>
+          <a href="#ai-insights">AI Insights</a>
+        </nav>
+      </header>
+
+      <div className="dashboard-container">
+        {/* ================= DASHBOARD ================= */}
+
+        <section id="dashboard" className="dashboard-section">
+          <div className="section-heading">
+            <div>
+              <span className="section-label">
+                OPERATIONS
+              </span>
+
+              <h2>Service Request Overview</h2>
+
+              <p>
+                Monitor workload, resolution performance
+                and service turnaround.
+              </p>
+            </div>
+          </div>
+
+          {/* ================= FILTERS ================= */}
+
+          <div className="filter-panel">
+            <div className="filter-heading">
               <div>
-                <div className="text-xs font-bold uppercase tracking-[0.22em] text-[#008C95] sm:text-sm">
-                  CPF FINANCIAL SERVICES
+                <h3>Search & Filters</h3>
+
+                <p>
+                  Narrow the dashboard to the operational
+                  records you want to analyse.
+                </p>
+              </div>
+
+              <div className="filter-count">
+                Showing{" "}
+                <strong>{totalRequests}</strong> of{" "}
+                <strong>{requests.length}</strong> requests
+              </div>
+            </div>
+
+            <div className="filter-grid">
+              <div className="filter-field search-field">
+                <label htmlFor="search">
+                  Search requests
+                </label>
+
+                <div className="search-wrapper">
+                  <span className="search-icon">
+                    🔎
+                  </span>
+
+                  <input
+                    id="search"
+                    type="text"
+                    value={searchTerm}
+                    onChange={(event) => {
+                      setSearchTerm(event.target.value);
+                      setCurrentPage(1);
+                    }}
+                    placeholder="Request ID, branch, request type..."
+                  />
                 </div>
+              </div>
 
-                <h1
-                  className={`mt-1 text-2xl font-bold tracking-tight sm:text-3xl ${
-                    darkMode
-                      ? "text-white"
-                      : "text-slate-900"
-                  }`}
-                >
-                  Member Service Request Dashboard
-                </h1>
+              <FilterSelect
+                label="Status"
+                value={statusFilter}
+                options={STATUS_OPTIONS}
+                onChange={(value) => {
+                  setStatusFilter(value);
+                  setCurrentPage(1);
+                }}
+              />
 
-                <p
-                  className={`mt-2 max-w-2xl text-sm sm:text-base ${mutedText}`}
+              <FilterSelect
+                label="Branch"
+                value={branchFilter}
+                options={BRANCH_OPTIONS}
+                onChange={(value) => {
+                  setBranchFilter(value);
+                  setCurrentPage(1);
+                }}
+              />
+
+              <FilterSelect
+                label="Request Type"
+                value={requestTypeFilter}
+                options={requestTypes}
+                onChange={(value) => {
+                  setRequestTypeFilter(value);
+                  setCurrentPage(1);
+                }}
+              />
+
+              <FilterSelect
+                label="Priority"
+                value={priorityFilter}
+                options={PRIORITY_OPTIONS}
+                onChange={(value) => {
+                  setPriorityFilter(value);
+                  setCurrentPage(1);
+                }}
+              />
+
+              <button
+                type="button"
+                className="reset-button"
+                onClick={resetFilters}
+              >
+                Reset Filters
+              </button>
+            </div>
+          </div>
+
+          {/* ================= KPI CARDS ================= */}
+
+          <div className="kpi-grid">
+            <KpiCard
+              title="Total Requests"
+              value={totalRequests}
+              description="Current filtered workload"
+              icon="◉"
+            />
+
+            <KpiCard
+              title="Resolved"
+              value={resolvedRequests.length}
+              description={`${resolutionRate.toFixed(
+                1
+              )}% resolution rate`}
+              icon="✓"
+              accent="teal"
+            />
+
+            <KpiCard
+              title="Pending"
+              value={pendingRequests.length}
+              description="Requests requiring follow-up"
+              icon="!"
+              accent="orange"
+            />
+
+            <KpiCard
+              title="Avg. Turnaround"
+              value={`${averageTurnaround.toFixed(
+                1
+              )} days`}
+              description="Resolved requests only"
+              icon="◷"
+              accent="slate"
+            />
+          </div>
+
+          {/* ================= CHARTS ================= */}
+
+          <div className="chart-grid">
+            <div className="dashboard-card">
+              <div className="card-heading">
+                <div>
+                  <h3>Request Status Distribution</h3>
+
+                  <p>
+                    Current composition of the filtered
+                    workload.
+                  </p>
+                </div>
+              </div>
+
+              <div className="chart-container">
+                <ResponsiveContainer
+                  width="100%"
+                  height="100%"
                 >
-                  Operational view of member service requests,
-                  resolution status and turnaround performance.
+                  <PieChart>
+                    <Pie
+                      data={statusData}
+                      dataKey="value"
+                      nameKey="name"
+                      cx="50%"
+                      cy="45%"
+                      innerRadius={65}
+                      outerRadius={100}
+                      paddingAngle={3}
+                    >
+                      {statusData.map((entry) => (
+                        <Cell
+                          key={entry.name}
+                          fill={
+                            STATUS_COLORS[
+                              entry.name as Status
+                            ]
+                          }
+                        />
+                      ))}
+                    </Pie>
+
+                    <Tooltip
+                      formatter={(value) => [
+                        value,
+                        "Requests",
+                      ]}
+                    />
+
+                    <Legend
+                      verticalAlign="bottom"
+                      height={36}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+
+                <div className="chart-center-label">
+                  <strong>{totalRequests}</strong>
+                  <span>Requests</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="dashboard-card">
+              <div className="card-heading">
+                <div>
+                  <h3>Branch Performance</h3>
+
+                  <p>
+                    Resolution rate by branch.
+                  </p>
+                </div>
+              </div>
+
+              <div className="chart-container branch-chart">
+                <ResponsiveContainer
+                  width="100%"
+                  height="100%"
+                >
+                  <BarChart
+                    data={branchPerformance}
+                    margin={{
+                      top: 10,
+                      right: 10,
+                      left: -15,
+                      bottom: 5,
+                    }}
+                  >
+                    <CartesianGrid
+                      strokeDasharray="3 3"
+                      vertical={false}
+                    />
+
+                    <XAxis
+                      dataKey="branch"
+                      tick={{
+                        fontSize: 12,
+                      }}
+                    />
+
+                    <YAxis
+                      domain={[0, 100]}
+                      tick={{
+                        fontSize: 12,
+                      }}
+                      tickFormatter={(value) =>
+                        `${value}%`
+                      }
+                    />
+
+                    <Tooltip
+                      formatter={(value) => [
+                        `${value}%`,
+                        "Resolution Rate",
+                      ]}
+                    />
+
+                    <Bar
+                      dataKey="resolutionRate"
+                      name="Resolution Rate"
+                      fill="#008C95"
+                      radius={[6, 6, 0, 0]}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* ================= FEEDBACK ================= */}
+
+        <section
+          id="feedback"
+          className="dashboard-section"
+        >
+          <div className="section-heading">
+            <div>
+              <span className="section-label">
+                SERVICE QUALITY
+              </span>
+
+              <h2>Member Satisfaction & Feedback</h2>
+
+              <p>
+                Prototype analysis of member feedback and
+                satisfaction.
+              </p>
+            </div>
+
+            <span className="prototype-badge">
+              PROTOTYPE DATA
+            </span>
+          </div>
+
+          <div className="prototype-notice">
+            <strong>Prototype / dummy feedback analysis.</strong>
+
+            <span>
+              {" "}
+              Real production feedback would come from the
+              approved member-service source.
+            </span>
+          </div>
+
+          <div className="small-kpi-grid">
+            <MiniMetric
+              title="Average Rating"
+              value={`${averageSatisfaction.toFixed(
+                1
+              )} / 5`}
+              description="Prototype feedback sample"
+            />
+
+            <MiniMetric
+              title="Feedback Responses"
+              value={filteredFeedback.length}
+              description="Prototype responses"
+            />
+
+            <MiniMetric
+              title="Positive Feedback"
+              value={`${positiveFeedback.toFixed(
+                1
+              )}%`}
+              description="Ratings of 4 or 5"
+            />
+          </div>
+
+          <div className="dashboard-card">
+            <div className="card-heading">
+              <div>
+                <h3>Feedback Rating Distribution</h3>
+
+                <p>
+                  Distribution of prototype satisfaction
+                  ratings.
                 </p>
               </div>
             </div>
 
-            {/* THEME BUTTON */}
-            <button
-              type="button"
-              onClick={() => setDarkMode(!darkMode)}
-              className="rounded-lg border border-[#008C95] px-4 py-2 text-sm font-semibold text-[#008C95] transition hover:bg-[#008C95] hover:text-white"
-            >
-              {darkMode
-                ? "☀️ Light Mode"
-                : "🌙 Dark Mode"}
-            </button>
-          </div>
-
-          {/* =====================================================
-              NAVIGATION
-          ====================================================== */}
-
-          <nav className="mt-5 flex flex-wrap gap-2 border-t border-slate-200 pt-4 dark:border-slate-800">
-            <a
-              href="#dashboard"
-              className="rounded-md px-3 py-2 text-sm font-medium text-[#008C95] hover:bg-slate-100 dark:hover:bg-slate-800"
-            >
-              Dashboard
-            </a>
-
-            <a
-              href="#feedback"
-              className={`rounded-md px-3 py-2 text-sm font-medium ${mutedText} hover:bg-slate-100 dark:hover:bg-slate-800`}
-            >
-              Member Feedback
-            </a>
-
-            <a
-              href="#reports"
-              className={`rounded-md px-3 py-2 text-sm font-medium ${mutedText} hover:bg-slate-100 dark:hover:bg-slate-800`}
-            >
-              Reports
-            </a>
-
-            <a
-              href="#ai-insights"
-              className={`rounded-md px-3 py-2 text-sm font-medium ${mutedText} hover:bg-slate-100 dark:hover:bg-slate-800`}
-            >
-              AI Insights
-            </a>
-          </nav>
-        </div>
-      </header>
-
-      <div
-        id="dashboard"
-        className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:px-8"
-      >
-        {/* =======================================================
-            SEARCH + FILTERS
-        ======================================================== */}
-
-        <section
-          className={`rounded-xl border p-5 shadow-sm ${cardBackground}`}
-        >
-          <div className="mb-4">
-            <h2 className="text-lg font-bold">
-              Search & Filters
-            </h2>
-
-            <p className={`mt-1 text-sm ${mutedText}`}>
-              Narrow the dashboard to the operational records
-              you want to analyse.
-            </p>
-          </div>
-
-          {/* SEARCH */}
-
-          <div className="mb-4">
-            <label
-              htmlFor="search"
-              className="mb-2 block text-sm font-semibold"
-            >
-              Search requests
-            </label>
-
-            <input
-              id="search"
-              type="text"
-              value={searchTerm}
-              onChange={(event) =>
-                updateSearch(event.target.value)
-              }
-              placeholder="Search request ID, branch, request type..."
-              className={`w-full rounded-lg border px-4 py-3 text-sm outline-none transition focus:border-[#008C95] focus:ring-2 focus:ring-[#008C95]/20 ${
-                darkMode
-                  ? "border-slate-700 bg-slate-800 text-white placeholder:text-slate-500"
-                  : "border-slate-300 bg-white text-slate-900 placeholder:text-slate-400"
-              }`}
-            />
-          </div>
-
-          {/* FILTERS */}
-
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-            <FilterSelect
-              label="Status"
-              value={statusFilter}
-              options={STATUS_OPTIONS}
-              onChange={updateStatus}
-              darkMode={darkMode}
-            />
-
-            <FilterSelect
-              label="Branch"
-              value={branchFilter}
-              options={BRANCH_OPTIONS}
-              onChange={updateBranch}
-              darkMode={darkMode}
-            />
-
-            <FilterSelect
-              label="Request Type"
-              value={requestTypeFilter}
-              options={requestTypes}
-              onChange={updateRequestType}
-              darkMode={darkMode}
-            />
-
-            <FilterSelect
-              label="Priority"
-              value={priorityFilter}
-              options={PRIORITY_OPTIONS}
-              onChange={updatePriority}
-              darkMode={darkMode}
-            />
-
-            <button
-              type="button"
-              onClick={resetFilters}
-              className="mt-auto rounded-lg border border-[#008C95] px-4 py-3 text-sm font-semibold text-[#008C95] transition hover:bg-[#008C95] hover:text-white"
-            >
-              Reset Filters
-            </button>
-          </div>
-
-          <div className="mt-4 text-sm font-medium">
-            Showing{" "}
-            <span className="font-bold text-[#008C95]">
-              {totalRequests}
-            </span>{" "}
-            of{" "}
-            <span className="font-bold">
-              {requests.length}
-            </span>{" "}
-            requests
-          </div>
-        </section>
-
-        {/* =======================================================
-            KPI CARDS
-        ======================================================== */}
-
-        <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <KpiCard
-            title="Total Requests"
-            value={totalRequests}
-            subtitle="Current filtered workload"
-            darkMode={darkMode}
-          />
-
-          <KpiCard
-            title="Resolved"
-            value={resolvedRequests.length}
-            subtitle={`${resolutionRate.toFixed(1)}% resolution rate`}
-            darkMode={darkMode}
-          />
-
-          <KpiCard
-            title="Pending"
-            value={pendingRequests.length}
-            subtitle="Requests requiring follow-up"
-            darkMode={darkMode}
-          />
-
-          <KpiCard
-            title="Avg. Turnaround"
-            value={`${averageTurnaround.toFixed(1)} days`}
-            subtitle="Resolved requests only"
-            darkMode={darkMode}
-          />
-        </section>
-
-        {/* =======================================================
-            STATUS + BRANCH
-        ======================================================== */}
-
-        <section className="grid gap-6 lg:grid-cols-2">
-          {/* STATUS DISTRIBUTION */}
-
-          <div
-            className={`rounded-xl border p-5 shadow-sm ${cardBackground}`}
-          >
-            <div className="mb-4">
-              <h2 className="text-lg font-bold">
-                Request Status Distribution
-              </h2>
-
-              <p className={`text-sm ${mutedText}`}>
-                Current composition of the filtered workload.
-              </p>
-            </div>
-
-            <div className="h-72">
+            <div className="chart-container feedback-chart">
               <ResponsiveContainer
                 width="100%"
                 height="100%"
               >
-                <PieChart>
-                  <Pie
-                    data={statusData}
-                    dataKey="value"
-                    nameKey="name"
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={90}
-                    label
-                  >
-                    {statusData.map((entry) => (
-                      <Cell
-                        key={entry.name}
-                        fill={
-                          STATUS_COLORS[
-                            entry.name as keyof typeof STATUS_COLORS
-                          ]
-                        }
-                      />
-                    ))}
-                  </Pie>
+                <BarChart
+                  data={feedbackRatingData}
+                  margin={{
+                    top: 10,
+                    right: 15,
+                    left: -15,
+                    bottom: 5,
+                  }}
+                >
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    vertical={false}
+                  />
 
-                  <Tooltip />
+                  <XAxis
+                    dataKey="rating"
+                    tick={{
+                      fontSize: 12,
+                    }}
+                  />
 
-                  <Legend />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-
-          {/* BRANCH PERFORMANCE */}
-
-          <div
-            className={`rounded-xl border p-5 shadow-sm ${cardBackground}`}
-          >
-            <div className="mb-4">
-              <h2 className="text-lg font-bold">
-                Branch Performance
-              </h2>
-
-              <p className={`text-sm ${mutedText}`}>
-                Resolution rate by branch.
-              </p>
-            </div>
-
-            <div className="h-72">
-              <ResponsiveContainer
-                width="100%"
-                height="100%"
-              >
-                <BarChart data={branchData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-
-                  <XAxis dataKey="branch" />
-
-                  <YAxis />
+                  <YAxis
+                    allowDecimals={false}
+                    tick={{
+                      fontSize: 12,
+                    }}
+                  />
 
                   <Tooltip />
 
                   <Bar
-                    dataKey="resolutionRate"
-                    name="Resolution Rate %"
+                    dataKey="responses"
+                    name="Responses"
                     fill="#008C95"
                     radius={[6, 6, 0, 0]}
                   />
@@ -842,538 +827,476 @@ export default function DashboardPage() {
           </div>
         </section>
 
-        {/* =======================================================
-            CUSTOMER SATISFACTION
-        ======================================================== */}
+        {/* ================= CONTACT CHANNELS ================= */}
 
-        <section
-          id="feedback"
-          className={`rounded-xl border p-5 shadow-sm ${cardBackground}`}
-        >
-          <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        <section className="dashboard-section">
+          <div className="section-heading">
             <div>
-              <h2 className="text-lg font-bold">
-                Member Satisfaction & Feedback
-              </h2>
+              <span className="section-label">
+                MEMBER BEHAVIOUR
+              </span>
 
-              <p className={`text-sm ${mutedText}`}>
-                Prototype / dummy feedback analysis. Real
-                production feedback would come from the approved
-                member-service source.
+              <h2>Member Contact Channels</h2>
+
+              <p>
+                Prototype analysis of how members may
+                contact the service team.
               </p>
             </div>
 
-            <span className="w-fit rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-700">
+            <span className="prototype-badge">
               PROTOTYPE DATA
             </span>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-3">
-            <KpiCard
-              title="Average Rating"
-              value={`${averageSatisfaction.toFixed(1)} / 5`}
-              subtitle="Prototype feedback sample"
-              darkMode={darkMode}
-            />
-
-            <KpiCard
-              title="Feedback Responses"
-              value={filteredFeedback.length}
-              subtitle="Prototype responses"
-              darkMode={darkMode}
-            />
-
-            <KpiCard
-              title="Positive Feedback"
-              value={`${positiveFeedbackPercentage.toFixed(
-                1
-              )}%`}
-              subtitle="Ratings of 4 or 5"
-              darkMode={darkMode}
-            />
-          </div>
-
-          <div className="mt-6 h-72">
-            <ResponsiveContainer
-              width="100%"
-              height="100%"
-            >
-              <BarChart data={satisfactionDistribution}>
-                <CartesianGrid strokeDasharray="3 3" />
-
-                <XAxis dataKey="rating" />
-
-                <YAxis allowDecimals={false} />
-
-                <Tooltip />
-
-                <Bar
-                  dataKey="count"
-                  name="Responses"
-                  fill="#008C95"
-                  radius={[6, 6, 0, 0]}
-                />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </section>
-
-        {/* =======================================================
-            CONTACT CHANNEL
-        ======================================================== */}
-
-        <section
-          className={`rounded-xl border p-5 shadow-sm ${cardBackground}`}
-        >
-          <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <h2 className="text-lg font-bold">
-                Member Contact Channels
-              </h2>
-
-              <p className={`text-sm ${mutedText}`}>
-                Prototype analysis of how members may contact
-                the service team.
-              </p>
-            </div>
-
-            <span className="w-fit rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-700">
-              PROTOTYPE DATA
-            </span>
-          </div>
-
-          <div className="grid gap-6 lg:grid-cols-2">
-            <div className="h-72">
-              <ResponsiveContainer
-                width="100%"
-                height="100%"
-              >
-                <PieChart>
-                  <Pie
-                    data={channelData}
-                    dataKey="value"
-                    nameKey="name"
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={90}
-                    label
-                  >
-                    {channelData.map((entry, index) => (
-                      <Cell
-                        key={entry.name}
-                        fill={
-                          CHANNEL_COLORS[
-                            index % CHANNEL_COLORS.length
-                          ]
-                        }
-                      />
-                    ))}
-                  </Pie>
-
-                  <Tooltip />
-
-                  <Legend />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-
-            <div className="flex flex-col justify-center">
-              <div
-                className={`rounded-lg p-5 ${
-                  darkMode
-                    ? "bg-slate-800"
-                    : "bg-slate-50"
-                }`}
-              >
-                <p
-                  className={`text-sm font-medium ${mutedText}`}
+          <div className="dashboard-card channel-card">
+            <div className="channel-layout">
+              <div className="channel-chart">
+                <ResponsiveContainer
+                  width="100%"
+                  height="100%"
                 >
+                  <PieChart>
+                    <Pie
+                      data={channelData}
+                      dataKey="value"
+                      nameKey="name"
+                      cx="50%"
+                      cy="45%"
+                      innerRadius={65}
+                      outerRadius={100}
+                      paddingAngle={3}
+                    >
+                      {channelData.map(
+                        (entry, index) => (
+                          <Cell
+                            key={entry.name}
+                            fill={
+                              CHANNEL_COLORS[
+                                index %
+                                  CHANNEL_COLORS.length
+                              ]
+                            }
+                          />
+                        )
+                      )}
+                    </Pie>
+
+                    <Tooltip
+                      formatter={(value) => [
+                        value,
+                        "Requests",
+                      ]}
+                    />
+
+                    <Legend
+                      verticalAlign="bottom"
+                      height={36}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+
+              <div className="channel-summary">
+                <span className="summary-label">
                   Leading prototype channel
-                </p>
+                </span>
 
-                <p className="mt-2 text-3xl font-bold text-[#008C95]">
-                  {topChannel}
-                </p>
+                <strong>
+                  {topChannel?.name || "N/A"}
+                </strong>
 
-                <p
-                  className={`mt-3 text-sm leading-6 ${mutedText}`}
-                >
+                <span className="channel-value">
+                  {topChannel?.value || 0} requests
+                </span>
+
+                <p>
                   In a production dashboard, this analysis
                   would help management understand member
                   behaviour and identify opportunities to
-                  improve digital channels such as the chatbot.
+                  improve digital channels such as the
+                  chatbot.
                 </p>
               </div>
             </div>
           </div>
         </section>
 
-        {/* =======================================================
-            SERVICE REQUEST TABLE
-        ======================================================== */}
+        {/* ================= TABLE ================= */}
 
-        <section
-          className={`rounded-xl border shadow-sm ${cardBackground}`}
-        >
-          <div className="border-b border-slate-200 p-5 dark:border-slate-800">
-            <h2 className="text-lg font-bold">
-              Service Request Details
-            </h2>
+        <section className="dashboard-section">
+          <div className="section-heading">
+            <div>
+              <span className="section-label">
+                OPERATIONAL RECORDS
+              </span>
 
-            <p className={`mt-1 text-sm ${mutedText}`}>
-              Detailed records behind the dashboard summaries.
-            </p>
-          </div>
+              <h2>Service Request Details</h2>
 
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-left text-sm">
-              <thead className={tableHeader}>
-                <tr>
-                  <th className="px-5 py-3 font-semibold">
-                    Request ID
-                  </th>
-
-                  <th className="px-5 py-3 font-semibold">
-                    Branch
-                  </th>
-
-                  <th className="px-5 py-3 font-semibold">
-                    Request Type
-                  </th>
-
-                  <th className="px-5 py-3 font-semibold">
-                    Priority
-                  </th>
-
-                  <th className="px-5 py-3 font-semibold">
-                    Status
-                  </th>
-
-                  <th className="px-5 py-3 font-semibold">
-                    Turnaround
-                  </th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {displayedRequests.length > 0 ? (
-                  displayedRequests.map((request) => (
-                    <tr
-                      key={request.request_id}
-                      className={`border-t ${tableRow}`}
-                    >
-                      <td className="px-5 py-4 font-semibold">
-                        {request.request_id}
-                      </td>
-
-                      <td className="px-5 py-4">
-                        {request.branch}
-                      </td>
-
-                      <td className="px-5 py-4">
-                        {request.request_type}
-                      </td>
-
-                      <td className="px-5 py-4">
-                        <PriorityBadge
-                          priority={request.priority}
-                        />
-                      </td>
-
-                      <td className="px-5 py-4">
-                        <StatusBadge
-                          status={request.status}
-                        />
-                      </td>
-
-                      <td className="px-5 py-4">
-                        {request.status === "Resolved"
-                          ? `${request.turnaround_days} days`
-                          : "—"}
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td
-                      colSpan={6}
-                      className={`px-5 py-10 text-center ${mutedText}`}
-                    >
-                      No requests match the current search
-                      and filters.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {/* PAGINATION */}
-
-          <div className="flex flex-col gap-4 border-t border-slate-200 p-5 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between">
-            <p className={`text-sm ${mutedText}`}>
-              Showing{" "}
-              {totalRequests === 0
-                ? 0
-                : startIndex + 1}{" "}
-              – {endIndex} of {totalRequests} requests
-            </p>
-
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={() =>
-                  goToPage(safeCurrentPage - 1)
-                }
-                disabled={safeCurrentPage === 1}
-                className={`rounded-lg border px-3 py-2 text-sm font-medium ${
-                  safeCurrentPage === 1
-                    ? "cursor-not-allowed opacity-40"
-                    : "hover:border-[#008C95] hover:text-[#008C95]"
-                }`}
-              >
-                ← Previous
-              </button>
-
-              {Array.from(
-                { length: totalPages },
-                (_, index) => index + 1
-              ).map((page) => (
-                <button
-                  key={page}
-                  type="button"
-                  onClick={() => goToPage(page)}
-                  className={`rounded-lg px-3 py-2 text-sm font-semibold ${
-                    page === safeCurrentPage
-                      ? "bg-[#008C95] text-white"
-                      : "border hover:border-[#008C95] hover:text-[#008C95]"
-                  }`}
-                >
-                  {page}
-                </button>
-              ))}
-
-              <button
-                type="button"
-                onClick={() =>
-                  goToPage(safeCurrentPage + 1)
-                }
-                disabled={
-                  safeCurrentPage === totalPages
-                }
-                className={`rounded-lg border px-3 py-2 text-sm font-medium ${
-                  safeCurrentPage === totalPages
-                    ? "cursor-not-allowed opacity-40"
-                    : "hover:border-[#008C95] hover:text-[#008C95]"
-                }`}
-              >
-                Next →
-              </button>
+              <p>
+                Detailed records behind the dashboard
+                summaries.
+              </p>
             </div>
           </div>
 
-          <div className={`px-5 pb-5 text-xs ${mutedText}`}>
-            The table displays 10 records per page where
-            available. KPI calculations use the complete
-            filtered dataset.
+          <div className="dashboard-card table-card">
+            <div className="table-wrapper">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Request ID</th>
+                    <th>Branch</th>
+                    <th>Request Type</th>
+                    <th>Priority</th>
+                    <th>Status</th>
+                    <th>Turnaround</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {displayedRequests.length > 0 ? (
+                    displayedRequests.map((request) => (
+                      <tr key={request.request_id}>
+                        <td className="request-id">
+                          {request.request_id}
+                        </td>
+
+                        <td>{request.branch}</td>
+
+                        <td>{request.request_type}</td>
+
+                        <td>
+                          <PriorityBadge
+                            priority={request.priority}
+                          />
+                        </td>
+
+                        <td>
+                          <StatusBadge
+                            status={request.status}
+                          />
+                        </td>
+
+                        <td>
+                          {request.status ===
+                          "Resolved"
+                            ? `${request.turnaround_days} days`
+                            : "—"}
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td
+                        colSpan={6}
+                        className="no-results"
+                      >
+                        No service requests match the
+                        selected filters.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="table-footer">
+              <span>
+                Showing{" "}
+                {totalRequests === 0
+                  ? 0
+                  : startIndex + 1}{" "}
+                –{" "}
+                {Math.min(
+                  startIndex + PAGE_SIZE,
+                  totalRequests
+                )}{" "}
+                of {totalRequests} requests
+              </span>
+
+              <div className="pagination">
+                <button
+                  type="button"
+                  disabled={safeCurrentPage === 1}
+                  onClick={() =>
+                    setCurrentPage(
+                      Math.max(1, safeCurrentPage - 1)
+                    )
+                  }
+                >
+                  ← Previous
+                </button>
+
+                {Array.from(
+                  { length: totalPages },
+                  (_, index) => index + 1
+                )
+                  .slice(0, 10)
+                  .map((page) => (
+                    <button
+                      type="button"
+                      key={page}
+                      className={
+                        page === safeCurrentPage
+                          ? "active-page"
+                          : ""
+                      }
+                      onClick={() =>
+                        setCurrentPage(page)
+                      }
+                    >
+                      {page}
+                    </button>
+                  ))}
+
+                <button
+                  type="button"
+                  disabled={
+                    safeCurrentPage === totalPages
+                  }
+                  onClick={() =>
+                    setCurrentPage(
+                      Math.min(
+                        totalPages,
+                        safeCurrentPage + 1
+                      )
+                    )
+                  }
+                >
+                  Next →
+                </button>
+              </div>
+            </div>
+
+            <div className="table-note">
+              The table displays 10 records per page where
+              available. KPI calculations use the complete
+              filtered dataset.
+            </div>
           </div>
         </section>
 
-        {/* =======================================================
-            REPORTS
-        ======================================================== */}
+        {/* ================= REPORTS ================= */}
 
         <section
           id="reports"
-          className={`rounded-xl border p-5 shadow-sm ${cardBackground}`}
+          className="dashboard-section"
         >
-          <div className="mb-5">
-            <h2 className="text-lg font-bold">
-              Reports & Export
-            </h2>
+          <div className="section-heading">
+            <div>
+              <span className="section-label">
+                REPORTING
+              </span>
 
-            <p className={`mt-1 text-sm ${mutedText}`}>
-              Export the currently filtered service-request
-              records for further analysis or reporting.
-            </p>
+              <h2>Reports & Export</h2>
+
+              <p>
+                Export the currently filtered service-request
+                records for further analysis or reporting.
+              </p>
+            </div>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2">
-            <div
-              className={`rounded-lg border p-5 ${
-                darkMode
-                  ? "border-slate-700 bg-slate-800"
-                  : "border-slate-200 bg-slate-50"
-              }`}
-            >
-              <h3 className="font-bold">
-                Current Report
-              </h3>
+          <div className="report-grid">
+            <div className="dashboard-card report-card">
+              <div className="report-icon">▣</div>
 
-              <p className={`mt-2 text-sm ${mutedText}`}>
-                {totalRequests} requests currently match the
-                selected filters and search criteria.
-              </p>
+              <div>
+                <h3>Current Report</h3>
 
-              <button
-                type="button"
-                onClick={exportCSV}
-                className="mt-4 rounded-lg bg-[#008C95] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#006970]"
-              >
-                Export Filtered Data CSV
-              </button>
-            </div>
-
-            <div
-              className={`rounded-lg border p-5 ${
-                darkMode
-                  ? "border-slate-700 bg-slate-800"
-                  : "border-slate-200 bg-slate-50"
-              }`}
-            >
-              <h3 className="font-bold">
-                Operational Summary
-              </h3>
-
-              <div className={`mt-3 space-y-2 text-sm ${mutedText}`}>
                 <p>
-                  Total workload:{" "}
-                  <strong>{totalRequests}</strong>
+                  {totalRequests} requests currently match
+                  the selected filters and search criteria.
                 </p>
 
-                <p>
-                  Resolved:{" "}
+                <button
+                  type="button"
+                  className="primary-button"
+                  onClick={exportCSV}
+                >
+                  Export Filtered Data CSV
+                </button>
+              </div>
+            </div>
+
+            <div className="dashboard-card report-summary">
+              <div className="report-summary-header">
+                <div>
+                  <h3>Operational Summary</h3>
+
+                  <p>
+                    Snapshot of the current filtered
+                    workload.
+                  </p>
+                </div>
+              </div>
+
+              <div className="summary-grid">
+                <div>
+                  <span>Total workload</span>
+                  <strong>{totalRequests}</strong>
+                </div>
+
+                <div>
+                  <span>Resolved</span>
                   <strong>
                     {resolvedRequests.length}
                   </strong>
-                </p>
+                </div>
 
-                <p>
-                  Pending:{" "}
+                <div>
+                  <span>Pending</span>
                   <strong>
                     {pendingRequests.length}
                   </strong>
-                </p>
+                </div>
 
-                <p>
-                  Resolution rate:{" "}
+                <div>
+                  <span>Resolution rate</span>
                   <strong>
                     {resolutionRate.toFixed(1)}%
                   </strong>
-                </p>
+                </div>
 
-                <p>
-                  Average turnaround:{" "}
+                <div>
+                  <span>Avg. turnaround</span>
                   <strong>
                     {averageTurnaround.toFixed(1)} days
                   </strong>
-                </p>
+                </div>
               </div>
             </div>
           </div>
         </section>
 
-        {/* =======================================================
-            AI INSIGHTS
-        ======================================================== */}
+        {/* ================= AI ================= */}
 
         <section
           id="ai-insights"
-          className={`rounded-xl border p-5 shadow-sm ${cardBackground}`}
+          className="dashboard-section"
         >
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h2 className="text-lg font-bold">
-                AI Insights
-              </h2>
+          <div className="ai-card">
+            <div className="ai-header">
+              <div className="ai-icon">✦</div>
 
-              <p className={`mt-1 text-sm ${mutedText}`}>
-                Reserved space for future AI-powered service
-                request analysis.
-              </p>
+              <div>
+                <span className="section-label">
+                  FUTURE CAPABILITY
+                </span>
+
+                <h2>AI Insights</h2>
+
+                <p>
+                  Reserved space for future AI-powered
+                  service request analysis.
+                </p>
+              </div>
+
+              <span className="coming-badge">
+                COMING NEXT
+              </span>
             </div>
 
-            <span className="w-fit rounded-full bg-slate-200 px-3 py-1 text-xs font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-              COMING NEXT
-            </span>
-          </div>
+            <div className="ai-content">
+              <h3>Planned AI capability</h3>
 
-          <div
-            className={`mt-5 rounded-lg border p-5 ${
-              darkMode
-                ? "border-slate-700 bg-slate-800"
-                : "border-slate-200 bg-slate-50"
-            }`}
-          >
-            <h3 className="font-bold">
-              Planned AI capability
-            </h3>
+              <p>
+                A future version could use AI to identify
+                recurring request themes, summarise member
+                feedback, highlight unusual workload
+                patterns and suggest areas requiring
+                management attention.
+              </p>
 
-            <p className={`mt-2 text-sm leading-6 ${mutedText}`}>
-              A future version could use AI to identify
-              recurring request themes, summarise member
-              feedback, highlight unusual workload patterns
-              and suggest areas requiring management attention.
-            </p>
+              <div className="ai-capability-grid">
+                <div>
+                  <span>01</span>
+                  <strong>Theme Detection</strong>
+                  <p>
+                    Identify recurring member-service
+                    request themes.
+                  </p>
+                </div>
+
+                <div>
+                  <span>02</span>
+                  <strong>Feedback Summary</strong>
+                  <p>
+                    Summarise large volumes of member
+                    feedback.
+                  </p>
+                </div>
+
+                <div>
+                  <span>03</span>
+                  <strong>Workload Alerts</strong>
+                  <p>
+                    Highlight unusual changes in workload
+                    patterns.
+                  </p>
+                </div>
+
+                <div>
+                  <span>04</span>
+                  <strong>Management Attention</strong>
+                  <p>
+                    Surface areas that may require
+                    management review.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="ai-footer">
+              <strong>Important:</strong> AI outputs are
+              not being presented as real in this prototype.
+              Production AI would require approved data,
+              governance and validation.
+            </div>
           </div>
         </section>
-
-        {/* =======================================================
-            PROTOTYPE NOTE
-        ======================================================== */}
-
-        <footer
-          className={`rounded-xl border p-5 text-sm ${cardBackground}`}
-        >
-          <p className={`leading-6 ${mutedText}`}>
-            <strong className="text-[#008C95]">
-              Prototype notice:
-            </strong>{" "}
-            This dashboard uses dummy CPF-style service-request
-            data for demonstration and development. The
-            satisfaction and contact-channel sections are
-            prototype examples and should be connected to
-            approved production data before operational use.
-          </p>
-        </footer>
       </div>
+
+      {/* ================= FOOTER ================= */}
+
+      <footer className="dashboard-footer">
+        <div>
+          <strong>CPF FINANCIAL SERVICES</strong>
+          <span>Member Service Request Dashboard</span>
+        </div>
+
+        <p>
+          Prototype dashboard using dummy CPF-style
+          service-request data.
+        </p>
+      </footer>
     </main>
   );
 }
 
-/* =============================================================
-   REUSABLE FILTER COMPONENT
-============================================================= */
+/* ================= COMPONENTS ================= */
 
 function FilterSelect({
   label,
   value,
   options,
   onChange,
-  darkMode,
 }: {
   label: string;
   value: string;
   options: string[];
   onChange: (value: string) => void;
-  darkMode: boolean;
 }) {
   return (
-    <div>
-      <label className="mb-2 block text-sm font-semibold">
-        {label}
-      </label>
+    <div className="filter-field">
+      <label>{label}</label>
 
       <select
         value={value}
         onChange={(event) =>
           onChange(event.target.value)
         }
-        className={`w-full rounded-lg border px-3 py-3 text-sm outline-none focus:border-[#008C95] focus:ring-2 focus:ring-[#008C95]/20 ${
-          darkMode
-            ? "border-slate-700 bg-slate-800 text-white"
-            : "border-slate-300 bg-white text-slate-900"
-        }`}
       >
         {options.map((option) => (
           <option key={option} value={option}>
@@ -1385,98 +1308,87 @@ function FilterSelect({
   );
 }
 
-/* =============================================================
-   KPI CARD
-============================================================= */
-
 function KpiCard({
   title,
   value,
-  subtitle,
-  darkMode,
+  description,
+  icon,
+  accent = "teal",
 }: {
   title: string;
   value: string | number;
-  subtitle: string;
-  darkMode: boolean;
+  description: string;
+  icon: string;
+  accent?: "teal" | "orange" | "slate";
 }) {
   return (
-    <div
-      className={`rounded-xl border p-5 shadow-sm ${darkMode
-        ? "border-slate-800 bg-slate-900"
-        : "border-slate-200 bg-white"
-      }`}
-    >
-      <p className="text-sm font-semibold text-[#008C95]">
-        {title}
-      </p>
+    <div className={`kpi-card ${accent}`}>
+      <div className="kpi-top">
+        <span>{title}</span>
 
-      <p className="mt-2 text-3xl font-bold">
-        {value}
-      </p>
+        <div className="kpi-icon">{icon}</div>
+      </div>
 
-      <p
-        className={`mt-2 text-xs ${
-          darkMode
-            ? "text-slate-400"
-            : "text-slate-500"
-        }`}
-      >
-        {subtitle}
-      </p>
+      <strong>{value}</strong>
+
+      <p>{description}</p>
     </div>
   );
 }
 
-/* =============================================================
-   STATUS BADGE
-============================================================= */
+function MiniMetric({
+  title,
+  value,
+  description,
+}: {
+  title: string;
+  value: string | number;
+  description: string;
+}) {
+  return (
+    <div className="mini-metric">
+      <span>{title}</span>
+
+      <strong>{value}</strong>
+
+      <p>{description}</p>
+    </div>
+  );
+}
 
 function StatusBadge({
   status,
 }: {
   status: Status;
 }) {
-  const styles = {
-    Resolved:
-      "bg-emerald-100 text-emerald-700",
-    Pending:
-      "bg-amber-100 text-amber-700",
-    "In Progress":
-      "bg-slate-200 text-slate-700",
-  };
+  const className =
+    status === "Resolved"
+      ? "status-resolved"
+      : status === "Pending"
+      ? "status-pending"
+      : "status-progress";
 
   return (
-    <span
-      className={`inline-flex rounded-full px-3 py-1 text-xs font-bold ${styles[status]}`}
-    >
+    <span className={`status-badge ${className}`}>
       {status}
     </span>
   );
 }
-
-/* =============================================================
-   PRIORITY BADGE
-============================================================= */
 
 function PriorityBadge({
   priority,
 }: {
   priority: Priority;
 }) {
-  const styles = {
-    Normal:
-      "bg-slate-100 text-slate-700",
-    High:
-      "bg-orange-100 text-orange-700",
-    Urgent:
-      "bg-red-100 text-red-700",
-  };
+  const className =
+    priority === "Urgent"
+      ? "priority-urgent"
+      : priority === "High"
+      ? "priority-high"
+      : "priority-normal";
 
   return (
-    <span
-      className={`inline-flex rounded-full px-3 py-1 text-xs font-bold ${styles[priority]}`}
-    >
+    <span className={`priority-badge ${className}`}>
       {priority}
     </span>
   );
