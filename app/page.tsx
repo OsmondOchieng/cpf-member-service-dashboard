@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useMemo, useState } from "react";
@@ -44,7 +45,7 @@ const BRANCH_OPTIONS = [
 
 const PRIORITY_OPTIONS = ["All", "Normal", "High", "Urgent"];
 
-const STATUS_COLORS = {
+const STATUS_COLORS: Record<Status, string> = {
   Resolved: "#42A4C1",
   Pending: "#EC006A",
   "In Progress": "#64748B",
@@ -58,33 +59,6 @@ const CHANNEL_COLORS = [
 ];
 
 const requests = requestData as ServiceRequest[];
-
-/*
-  The original service-request dataset does not contain member
-  satisfaction or contact-channel fields.
-
-  These two sections therefore use clearly labelled prototype
-  data to demonstrate how the dashboard can support those
-  future business requirements.
-*/
-
-const prototypeFeedbackData = requests.map((request, index) => {
-  const ratings = [5, 4, 4, 5, 3, 4, 5, 4, 3, 5];
-
-  return {
-    ...request,
-    feedback_rating: ratings[index % ratings.length],
-  };
-});
-
-const prototypeChannelData = requests.map((request, index) => {
-  const channels = ["Email", "Email", "Chatbot", "Phone", "Branch"];
-
-  return {
-    ...request,
-    contact_channel: channels[index % channels.length],
-  };
-});
 
 export default function Dashboard() {
   const [statusFilter, setStatusFilter] = useState("All");
@@ -174,11 +148,10 @@ export default function Dashboard() {
 
   const totalPages = Math.max(
     1,
-    Math.ceil(filteredRequests.length / PAGE_SIZE)
+    Math.ceil(totalRequests / PAGE_SIZE)
   );
 
   const safeCurrentPage = Math.min(currentPage, totalPages);
-
   const startIndex = (safeCurrentPage - 1) * PAGE_SIZE;
 
   const displayedRequests = filteredRequests.slice(
@@ -187,18 +160,9 @@ export default function Dashboard() {
   );
 
   const statusData = [
-    {
-      name: "Resolved",
-      value: resolvedRequests.length,
-    },
-    {
-      name: "Pending",
-      value: pendingRequests.length,
-    },
-    {
-      name: "In Progress",
-      value: inProgressRequests.length,
-    },
+    { name: "Resolved", value: resolvedRequests.length },
+    { name: "Pending", value: pendingRequests.length },
+    { name: "In Progress", value: inProgressRequests.length },
   ];
 
   const branchPerformance = useMemo(() => {
@@ -237,56 +201,6 @@ export default function Dashboard() {
       };
     });
   }, [filteredRequests]);
-
-  const feedbackData = prototypeFeedbackData.filter((feedback) =>
-    filteredRequests.some(
-      (request) => request.request_id === feedback.request_id
-    )
-  );
-
-  const averageSatisfaction =
-    feedbackData.length > 0
-      ? feedbackData.reduce(
-          (sum, item) => sum + item.feedback_rating,
-          0
-        ) / feedbackData.length
-      : 0;
-
-  const positiveFeedback =
-    feedbackData.length > 0
-      ? (feedbackData.filter(
-          (item) => item.feedback_rating >= 4
-        ).length /
-          feedbackData.length) *
-        100
-      : 0;
-
-  const ratingDistribution = [1, 2, 3, 4, 5].map((rating) => ({
-    rating: `${rating} Star`,
-    responses: feedbackData.filter(
-      (item) => item.feedback_rating === rating
-    ).length,
-  }));
-
-  const channelData = ["Email", "Chatbot", "Phone", "Branch"].map(
-    (channel) => ({
-      name: channel,
-      value: prototypeChannelData.filter(
-        (item) =>
-          item.contact_channel === channel &&
-          filteredRequests.some(
-            (request) => request.request_id === item.request_id
-          )
-      ).length,
-    })
-  );
-
-  const topChannel =
-    channelData.length > 0
-      ? channelData.reduce((previous, current) =>
-          current.value > previous.value ? current : previous
-        )
-      : null;
 
   const resetFilters = () => {
     setStatusFilter("All");
@@ -342,7 +256,9 @@ export default function Dashboard() {
 
     link.href = url;
     link.download = "cpf-member-service-report.csv";
+    document.body.appendChild(link);
     link.click();
+    link.remove();
 
     URL.revokeObjectURL(url);
   };
@@ -373,14 +289,20 @@ export default function Dashboard() {
           </div>
 
           <button
+            type="button"
             className="theme-button"
-            onClick={() => setDarkMode(!darkMode)}
+            onClick={() => setDarkMode((previous) => !previous)}
+            aria-label={
+              darkMode
+                ? "Switch to light mode"
+                : "Switch to dark mode"
+            }
           >
             {darkMode ? "☀ Light Mode" : "☾ Dark Mode"}
           </button>
         </div>
 
-        <nav className="main-nav">
+        <nav className="main-nav" aria-label="Main navigation">
           <a href="#dashboard">Dashboard</a>
           <a href="#feedback">Member Feedback</a>
           <a href="#reports">Reports</a>
@@ -395,16 +317,12 @@ export default function Dashboard() {
               <span className="section-label">OPERATIONS</span>
               <h2>Service Request Overview</h2>
             </div>
-
-            <div className="prototype-status">
-              Prototype Dashboard
-            </div>
           </div>
 
           <div className="filter-panel">
             <div className="filter-heading">
               <div>
-                <h3>Search & Filters</h3>
+                <h3>Search &amp; Filters</h3>
                 <p>
                   Find and analyse service requests using the
                   available operational dimensions.
@@ -418,10 +336,13 @@ export default function Dashboard() {
 
             <div className="filter-grid">
               <div className="search-wrapper">
-                <label>Search Requests</label>
+                <label htmlFor="request-search">
+                  Search Requests
+                </label>
 
                 <input
-                  type="text"
+                  id="request-search"
+                  type="search"
                   value={searchTerm}
                   onChange={(event) => {
                     setSearchTerm(event.target.value);
@@ -468,6 +389,7 @@ export default function Dashboard() {
               />
 
               <button
+                type="button"
                 className="reset-button"
                 onClick={resetFilters}
               >
@@ -487,9 +409,7 @@ export default function Dashboard() {
             <KpiCard
               label="Resolved"
               value={resolvedRequests.length}
-              description={`${resolutionRate.toFixed(
-                1
-              )}% resolution rate`}
+              description={`${resolutionRate.toFixed(1)}% resolution rate`}
               accent="blue"
             />
 
@@ -536,11 +456,7 @@ export default function Dashboard() {
                         {statusData.map((entry) => (
                           <Cell
                             key={entry.name}
-                            fill={
-                              STATUS_COLORS[
-                                entry.name as Status
-                              ]
-                            }
+                            fill={STATUS_COLORS[entry.name as Status]}
                           />
                         ))}
                       </Pie>
@@ -636,18 +552,14 @@ export default function Dashboard() {
               <span className="section-label">SERVICE QUALITY</span>
               <h2>Member Satisfaction</h2>
             </div>
-
-            <div className="prototype-badge">
-              PROTOTYPE DATA
-            </div>
           </div>
 
           <div className="card notice-card">
             <p>
-              The current dummy service-request dataset does not
-              contain member feedback ratings. This section
-              demonstrates the intended production dashboard
-              structure using prototype data.
+              Member satisfaction reporting will use recorded
+              feedback ratings when these become available in the
+              service-request dataset. The reporting structure is
+              provided here to support future service-quality analysis.
             </p>
           </div>
 
@@ -655,19 +567,19 @@ export default function Dashboard() {
             <div className="feedback-metrics">
               <MiniMetric
                 label="Average Rating"
-                value={`${averageSatisfaction.toFixed(1)} / 5`}
+                value="Not available"
                 accent="blue"
               />
 
               <MiniMetric
                 label="Feedback Responses"
-                value={feedbackData.length}
+                value="Not available"
                 accent="dark"
               />
 
               <MiniMetric
                 label="Positive Feedback"
-                value={`${positiveFeedback.toFixed(1)}%`}
+                value="Not available"
                 accent="pink"
               />
             </div>
@@ -676,47 +588,33 @@ export default function Dashboard() {
               <div className="card-header">
                 <div>
                   <h3>Feedback Rating Distribution</h3>
-                  <p>Prototype member satisfaction ratings.</p>
+                  <p>
+                    Recorded member ratings will be presented here
+                    when feedback data is connected.
+                  </p>
                 </div>
               </div>
 
-              <div className="chart-container">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={ratingDistribution}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="rating" />
-                    <YAxis allowDecimals={false} />
-                    <Tooltip />
-                    <Bar
-                      dataKey="responses"
-                      fill="#EC006A"
-                      radius={[6, 6, 0, 0]}
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
+              <div className="chart-container empty-chart">
+                <p>
+                  Feedback rating data is not currently available.
+                </p>
               </div>
             </div>
           </div>
 
           <div className="section-heading channel-heading">
             <div>
-              <span className="section-label">
-                MEMBER BEHAVIOUR
-              </span>
+              <span className="section-label">MEMBER BEHAVIOUR</span>
               <h2>Member Contact Channels</h2>
-            </div>
-
-            <div className="prototype-badge">
-              PROTOTYPE DATA
             </div>
           </div>
 
           <div className="card notice-card">
             <p>
-              This prototype demonstrates how service requests
-              could be analysed by contact channel. Production
-              implementation would use approved member-service
-              channel data.
+              Contact-channel reporting will help compare member
+              interactions across email, chatbot, phone and branch
+              services once verified channel data is available.
             </p>
           </div>
 
@@ -725,64 +623,37 @@ export default function Dashboard() {
               <div className="card-header">
                 <div>
                   <h3>Contact Channel Distribution</h3>
-                  <p>Email, chatbot, phone and branch interactions.</p>
+                  <p>
+                    Overview of member interactions by service channel.
+                  </p>
                 </div>
               </div>
 
-              <div className="chart-container">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={channelData}
-                      dataKey="value"
-                      nameKey="name"
-                      cx="50%"
-                      cy="50%"
-                      outerRadius={90}
-                    >
-                      {channelData.map((entry, index) => (
-                        <Cell
-                          key={entry.name}
-                          fill={CHANNEL_COLORS[index]}
-                        />
-                      ))}
-                    </Pie>
-
-                    <Tooltip />
-                    <Legend />
-                  </PieChart>
-                </ResponsiveContainer>
+              <div className="chart-container empty-chart">
+                <p>
+                  Contact-channel data is not currently available.
+                </p>
               </div>
             </div>
 
             <div className="channel-metrics">
-              {channelData.map((channel) => {
-                const percentage =
-                  filteredRequests.length > 0
-                    ? (channel.value / filteredRequests.length) * 100
-                    : 0;
-
-                return (
-                  <div
-                    className="channel-card"
-                    key={channel.name}
-                  >
-                    <span>{channel.name}</span>
-                    <strong>{channel.value}</strong>
-                    <small>{percentage.toFixed(1)}%</small>
+              {["Email", "Chatbot", "Phone", "Branch"].map(
+                (channel) => (
+                  <div className="channel-card" key={channel}>
+                    <span>{channel}</span>
+                    <strong>—</strong>
+                    <small>Awaiting data</small>
                   </div>
-                );
-              })}
-
-              {topChannel && (
-                <div className="leading-channel">
-                  <span>Leading Channel</span>
-                  <strong>{topChannel.name}</strong>
-                  <small>
-                    {topChannel.value} requests in current view
-                  </small>
-                </div>
+                )
               )}
+
+              <div className="leading-channel">
+                <span>Leading Channel</span>
+                <strong>Not available</strong>
+                <small>
+                  Recorded channel data is required for comparison.
+                </small>
+              </div>
             </div>
           </div>
         </section>
@@ -817,13 +688,10 @@ export default function Dashboard() {
                       </td>
 
                       <td>{request.branch}</td>
-
                       <td>{request.request_type}</td>
 
                       <td>
-                        <PriorityBadge
-                          priority={request.priority}
-                        />
+                        <PriorityBadge priority={request.priority} />
                       </td>
 
                       <td>
@@ -841,8 +709,7 @@ export default function Dashboard() {
                   {displayedRequests.length === 0 && (
                     <tr>
                       <td colSpan={6} className="empty-state">
-                        No service requests match the selected
-                        filters.
+                        No service requests match the selected filters.
                       </td>
                     </tr>
                   )}
@@ -853,19 +720,14 @@ export default function Dashboard() {
             <div className="pagination">
               <span>
                 Showing{" "}
-                {filteredRequests.length === 0
-                  ? 0
-                  : startIndex + 1}{" "}
-                –{" "}
-                {Math.min(
-                  startIndex + PAGE_SIZE,
-                  filteredRequests.length
-                )}{" "}
-                of {filteredRequests.length}
+                {totalRequests === 0 ? 0 : startIndex + 1} –{" "}
+                {Math.min(startIndex + PAGE_SIZE, totalRequests)} of{" "}
+                {totalRequests}
               </span>
 
               <div className="pagination-controls">
                 <button
+                  type="button"
                   disabled={safeCurrentPage === 1}
                   onClick={() =>
                     setCurrentPage((page) => Math.max(1, page - 1))
@@ -884,11 +746,13 @@ export default function Dashboard() {
                   )
                   .map((page) => (
                     <button
+                      type="button"
                       key={page}
                       className={
-                        page === safeCurrentPage
-                          ? "active-page"
-                          : ""
+                        page === safeCurrentPage ? "active-page" : ""
+                      }
+                      aria-current={
+                        page === safeCurrentPage ? "page" : undefined
                       }
                       onClick={() => setCurrentPage(page)}
                     >
@@ -897,6 +761,7 @@ export default function Dashboard() {
                   ))}
 
                 <button
+                  type="button"
                   disabled={safeCurrentPage === totalPages}
                   onClick={() =>
                     setCurrentPage((page) =>
@@ -921,7 +786,7 @@ export default function Dashboard() {
           <div className="section-heading">
             <div>
               <span className="section-label">REPORTING</span>
-              <h2>Reports & Export</h2>
+              <h2>Reports &amp; Export</h2>
             </div>
           </div>
 
@@ -936,6 +801,7 @@ export default function Dashboard() {
               </p>
 
               <button
+                type="button"
                 className="primary-button"
                 onClick={exportCSV}
               >
@@ -970,9 +836,7 @@ export default function Dashboard() {
 
               <div className="summary-row">
                 <span>Avg. Turnaround</span>
-                <strong>
-                  {averageTurnaround.toFixed(1)} days
-                </strong>
+                <strong>{averageTurnaround.toFixed(1)} days</strong>
               </div>
             </div>
           </div>
@@ -981,29 +845,27 @@ export default function Dashboard() {
         <section id="ai-insights" className="content-section">
           <div className="section-heading">
             <div>
-              <span className="section-label">
-                FUTURE CAPABILITY
-              </span>
+              <span className="section-label">INTELLIGENT OPERATIONS</span>
               <h2>AI Insights</h2>
             </div>
-
-            <div className="coming-badge">COMING NEXT</div>
           </div>
 
           <div className="ai-card">
             <div className="ai-header">
               <div>
-                <span className="ai-label">AI INTEGRATION SPACE</span>
+                <span className="ai-label">
+                  ADVANCED ANALYTICS
+                </span>
                 <h3>Intelligent Service Operations</h3>
               </div>
-
-              <span className="ai-status">PLANNED</span>
             </div>
 
             <p>
-              This area is reserved for future AI capabilities.
-              The current prototype does not present fabricated AI
-              recommendations or analysis as real results.
+              The AI insights area is designed to support future
+              analysis of service-request patterns, member feedback
+              and operational workloads. Insights will be presented
+              when a verified data source and the relevant analytical
+              capabilities are integrated.
             </p>
 
             <div className="ai-capabilities">
@@ -1020,8 +882,8 @@ export default function Dashboard() {
                 <span>02</span>
                 <h4>Feedback Summary</h4>
                 <p>
-                  Summarise member feedback and identify service
-                  quality trends.
+                  Summarise recorded member feedback and identify
+                  service-quality trends.
                 </p>
               </div>
 
@@ -1048,16 +910,22 @@ export default function Dashboard() {
       </div>
 
       <footer className="dashboard-footer">
-        <div>
+        <div className="footer-brand">
           <strong>CPF FINANCIAL SERVICES</strong>
           <span>Member Service Request Dashboard</span>
         </div>
 
         <p>
-          Prototype dashboard using dummy CPF-style service
-          request data. Satisfaction and contact-channel sections
-          are prototype examples.
+          Supporting service visibility, operational monitoring
+          and informed management decisions.
         </p>
+
+        <nav className="footer-nav" aria-label="Footer navigation">
+          <a href="#dashboard">Dashboard</a>
+          <a href="#feedback">Service Quality</a>
+          <a href="#reports">Reports</a>
+          <a href="#ai-insights">AI Insights</a>
+        </nav>
       </footer>
     </main>
   );
@@ -1074,11 +942,14 @@ function FilterSelect({
   options: string[];
   onChange: (value: string) => void;
 }) {
+  const id = `filter-${label.toLowerCase().replace(/\s+/g, "-")}`;
+
   return (
     <div className="filter-field">
-      <label>{label}</label>
+      <label htmlFor={id}>{label}</label>
 
       <select
+        id={id}
         value={value}
         onChange={(event) => onChange(event.target.value)}
       >
@@ -1131,7 +1002,9 @@ function MiniMetric({
 
 function StatusBadge({ status }: { status: Status }) {
   return (
-    <span className={`status-badge ${status.toLowerCase().replace(" ", "-")}`}>
+    <span
+      className={`status-badge ${status.toLowerCase().replace(" ", "-")}`}
+    >
       {status}
     </span>
   );
@@ -1139,9 +1012,7 @@ function StatusBadge({ status }: { status: Status }) {
 
 function PriorityBadge({ priority }: { priority: Priority }) {
   return (
-    <span
-      className={`priority-badge ${priority.toLowerCase()}`}
-    >
+    <span className={`priority-badge ${priority.toLowerCase()}`}>
       {priority}
     </span>
   );
